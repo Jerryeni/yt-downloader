@@ -420,8 +420,14 @@ export class DownloadEngine extends EventEmitter {
     if (rawError.includes('Video unavailable') || rawError.includes('This video is not available')) {
       return 'This video is unavailable or restricted by YouTube.';
     }
+    if (rawError.includes('No space left on device') || rawError.includes('Errno 28')) {
+      return 'Hard drive is full (No space left on device). Please free up disk space or change download folder in Settings.';
+    }
     if (rawError.includes('Private video')) {
-      return 'This video is private.';
+      return 'Skipped: This video is set to Private by the creator on YouTube.';
+    }
+    if (rawError.includes('Conversion failed') || rawError.includes('Unable to embed using ffprobe & ffmpeg')) {
+      return 'Postprocessing error: Failed to merge audio/video streams (likely ran out of disk space).';
     }
     if (rawError.includes('Sign in to confirm your age')) {
       return 'Age-restricted video requiring YouTube sign-in.';
