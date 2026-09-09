@@ -98,6 +98,22 @@ ipcMain.handle('analyze-url', async (_event, url: string) => {
   }
 });
 
+ipcMain.handle('search-youtube', async (_event, query: string) => {
+  try {
+    return await downloadEngine.searchVideos(query);
+  } catch (error: any) {
+    throw new Error(error.message || 'Failed to search YouTube');
+  }
+});
+
+ipcMain.handle('extract-playlist', async (_event, url: string) => {
+  try {
+    return await downloadEngine.extractPlaylist(url);
+  } catch (error: any) {
+    throw new Error(error.message || 'Failed to extract playlist');
+  }
+});
+
 ipcMain.handle('start-download', async (_event, request: DownloadRequest) => {
   try {
     // Run asynchronously, progress is streamed via event

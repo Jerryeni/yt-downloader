@@ -6,7 +6,7 @@ import { AppSettings, DownloadHistoryItem } from '../shared/types';
 const defaultSettings: AppSettings = {
   downloadFolder: path.join(app.getPath('downloads'), 'NovaDownloader'),
   maxConcurrentDownloads: 3,
-  theme: 'cosmic',
+  theme: 'dark',
   autoDetectClipboard: true,
   preferredVideoQuality: '1080p',
   preferredAudioFormat: 'mp3',

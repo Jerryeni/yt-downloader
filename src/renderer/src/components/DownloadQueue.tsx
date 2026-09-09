@@ -16,6 +16,7 @@ interface DownloadQueueProps {
   onClearCompleted: () => void;
   onOpenFile: (filePath: string) => void;
   onOpenFolder: (folderPath?: string) => void;
+  isElectron: boolean;
 }
 
 export const DownloadQueue: React.FC<DownloadQueueProps> = ({
@@ -24,11 +25,12 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
   onClearCompleted,
   onOpenFile,
   onOpenFolder,
+  isElectron,
 }) => {
   if (downloads.length === 0) {
     return (
       <div
-        className="glass-card"
+        className="solid-card"
         style={{
           textAlign: 'center',
           padding: '60px 20px',
@@ -38,23 +40,10 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
           gap: '12px',
         }}
       >
-        <div
-          style={{
-            width: '56px',
-            height: '56px',
-            borderRadius: '50%',
-            background: 'rgba(255,255,255,0.04)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#64748b',
-          }}
-        >
-          <CheckCircle2 size={28} />
-        </div>
-        <h3 style={{ fontSize: '18px' }}>No Active Downloads</h3>
-        <p style={{ color: '#94a3b8', fontSize: '14px', maxWidth: '380px' }}>
-          Paste a YouTube link in the Downloader tab to start grabbing high-quality video or audio.
+        <CheckCircle2 size={32} color="var(--text-muted)" />
+        <h3 style={{ fontSize: '17px' }}>No Active Downloads</h3>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '13px', maxWidth: '360px' }}>
+          Paste a link or search for any video to start downloading in maximum resolution.
         </p>
       </div>
     );
@@ -65,11 +54,9 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h3 style={{ fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <h3 style={{ fontSize: '17px', display: 'flex', alignItems: 'center', gap: '8px' }}>
           Active & Recent Downloads
-          <span className="badge-count" style={{ background: 'var(--accent-primary)' }}>
-            {downloads.length}
-          </span>
+          <span className="badge-count">{downloads.length}</span>
         </h3>
 
         {completedCount > 0 && (
@@ -80,11 +67,11 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
               alignItems: 'center',
               gap: '6px',
               padding: '6px 12px',
-              borderRadius: '8px',
+              borderRadius: 'var(--radius-sm)',
               fontSize: '12px',
-              background: 'rgba(255,255,255,0.05)',
-              color: '#94a3b8',
-              border: '1px solid rgba(255,255,255,0.08)',
+              background: 'var(--bg-subtle)',
+              color: 'var(--text-secondary)',
+              border: '1px solid var(--border-default)',
               cursor: 'pointer',
             }}
           >
@@ -102,28 +89,63 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
           const isCancelled = item.status === 'cancelled';
 
           return (
-            <div key={item.id} className="download-card">
-              <div className="download-card-body">
+            <div key={item.id} className="download-item-card">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
                 {item.thumbnail ? (
-                  <img src={item.thumbnail} alt={item.title} className="download-thumb" />
+                  <img
+                    src={item.thumbnail}
+                    alt={item.title}
+                    style={{
+                      width: '84px',
+                      height: '48px',
+                      borderRadius: 'var(--radius-sm)',
+                      objectFit: 'cover',
+                      backgroundColor: '#000',
+                    }}
+                  />
                 ) : (
-                  <div className="download-thumb" />
+                  <div
+                    style={{
+                      width: '84px',
+                      height: '48px',
+                      borderRadius: 'var(--radius-sm)',
+                      backgroundColor: 'var(--bg-subtle)',
+                    }}
+                  />
                 )}
 
-                <div className="download-info">
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span className="download-title" title={item.title}>
+                    <span
+                      style={{
+                        fontSize: '14px',
+                        fontWeight: 600,
+                        color: 'var(--text-primary)',
+                        maxWidth: '480px',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}
+                      title={item.title}
+                    >
                       {item.title}
                     </span>
-                    <span className={`status-pill status-${item.status}`}>
-                      {item.status}
-                    </span>
+                    <span className={`pill-status pill-${item.status}`}>{item.status}</span>
                   </div>
 
-                  <div className="download-meta">
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      fontSize: '12px',
+                      fontFamily: 'var(--font-mono)',
+                      color: 'var(--text-secondary)',
+                    }}
+                  >
                     {item.status === 'downloading' && (
                       <>
-                        <span style={{ color: 'var(--accent-secondary)' }}>{item.speed}</span>
+                        <span style={{ color: 'var(--primary)', fontWeight: 600 }}>{item.speed}</span>
                         <span>•</span>
                         <span>ETA: {item.eta}</span>
                         <span>•</span>
@@ -134,46 +156,44 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
                     )}
 
                     {isProcessing && (
-                      <span style={{ color: '#fbbf24', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ color: 'var(--warning)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <Loader2 size={13} className="spin-animation" />
-                        Merging video & audio streams...
+                        Merging streams...
                       </span>
                     )}
 
                     {isFinished && (
-                      <span style={{ color: '#34d399', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <span style={{ color: 'var(--success)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                         <CheckCircle2 size={14} />
-                        Download completed successfully
+                        Completed
                       </span>
                     )}
 
                     {isError && (
-                      <span style={{ color: '#f87171', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <span style={{ color: 'var(--danger)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                         <AlertCircle size={14} />
                         {item.error || 'Failed'}
                       </span>
                     )}
 
-                    {isCancelled && (
-                      <span style={{ color: '#94a3b8' }}>Cancelled</span>
-                    )}
+                    {isCancelled && <span>Cancelled</span>}
                   </div>
                 </div>
 
-                {/* Card Actions */}
-                <div className="download-actions">
-                  {isFinished && item.filePath && (
+                {/* Actions */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  {isFinished && item.filePath && isElectron && (
                     <>
                       <button
-                        className="action-icon-btn"
+                        className="icon-btn"
                         title="Show in Finder / Explorer"
                         onClick={() => onOpenFolder(item.filePath!)}
                       >
                         <FolderOpen size={16} />
                       </button>
                       <button
-                        className="action-icon-btn"
-                        title="Open Media"
+                        className="icon-btn"
+                        title="Open File"
                         onClick={() => onOpenFile(item.filePath!)}
                       >
                         <ExternalLink size={16} />
@@ -183,12 +203,12 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
 
                   {(item.status === 'downloading' || isProcessing) && (
                     <button
-                      className="action-icon-btn"
+                      className="icon-btn"
                       title="Cancel Download"
-                      style={{ color: '#f87171' }}
+                      style={{ color: 'var(--danger)' }}
                       onClick={() => onCancelDownload(item.id)}
                     >
-                      <XCircle size={18} />
+                      <XCircle size={17} />
                     </button>
                   )}
                 </div>
@@ -197,12 +217,12 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
               {/* Progress Bar */}
               {(item.status === 'downloading' || isProcessing) && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div className="progress-bar-track">
+                  <div className="progress-track">
                     <div
-                      className="progress-bar-fill"
+                      className="progress-fill"
                       style={{
                         width: `${item.percent}%`,
-                        backgroundColor: isProcessing ? '#f59e0b' : undefined,
+                        backgroundColor: isProcessing ? 'var(--warning)' : 'var(--primary)',
                       }}
                     />
                   </div>
@@ -211,7 +231,7 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
                       fontFamily: 'var(--font-mono)',
                       fontSize: '12px',
                       fontWeight: 600,
-                      minWidth: '42px',
+                      minWidth: '40px',
                       textAlign: 'right',
                     }}
                   >

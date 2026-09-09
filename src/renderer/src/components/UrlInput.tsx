@@ -3,7 +3,7 @@ import {
   Link2,
   ClipboardPaste,
   X,
-  Search,
+  ArrowRight,
   Loader2,
   Sparkles,
 } from 'lucide-react';
@@ -27,40 +27,62 @@ export const UrlInput: React.FC<UrlInputProps> = ({
   onUseClipboardUrl,
   onDismissClipboard,
 }) => {
+  const isMac = navigator.userAgent.includes('Mac');
+  const pasteShortcut = isMac ? '⌘V' : 'Ctrl+V';
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && url.trim() && !isLoading) {
       onAnalyze();
     }
   };
 
-  const handlePasteClick = async () => {
+  const handlePaste = async () => {
     try {
-      const text = await window.electronAPI.readClipboard();
-      if (text) {
-        setUrl(text.trim());
+      if (navigator.clipboard && navigator.clipboard.readText) {
+        const text = await navigator.clipboard.readText();
+        if (text) setUrl(text.trim());
       }
     } catch (e) {
-      console.error('Failed to read clipboard', e);
+      console.error('Failed to paste', e);
     }
   };
 
   return (
-    <div className="url-input-container">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
       {clipboardUrl && (
-        <div className="clipboard-banner">
-          <div className="clipboard-info">
-            <Sparkles size={16} />
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '10px 16px',
+            borderRadius: 'var(--radius-md)',
+            backgroundColor: 'var(--primary-subtle)',
+            border: '1px solid var(--border-focus)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px' }}>
+            <Sparkles size={16} color="var(--primary)" />
             <span>
-              YouTube link detected in your clipboard:{' '}
-              <strong style={{ color: '#fff' }}>
-                {clipboardUrl.length > 55 ? clipboardUrl.substring(0, 52) + '...' : clipboardUrl}
+              Detected YouTube link:{' '}
+              <strong style={{ color: 'var(--text-primary)' }}>
+                {clipboardUrl.length > 50 ? clipboardUrl.substring(0, 47) + '...' : clipboardUrl}
               </strong>
             </span>
           </div>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <button
-              className="clipboard-btn-paste"
               onClick={() => onUseClipboardUrl(clipboardUrl)}
+              style={{
+                padding: '5px 12px',
+                borderRadius: 'var(--radius-sm)',
+                backgroundColor: 'var(--primary)',
+                color: '#fff',
+                border: 'none',
+                fontSize: '12px',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
             >
               Paste & Analyze
             </button>
@@ -69,45 +91,70 @@ export const UrlInput: React.FC<UrlInputProps> = ({
               style={{
                 background: 'transparent',
                 border: 'none',
-                color: '#94a3b8',
+                color: 'var(--text-muted)',
                 cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
               }}
             >
-              <X size={16} />
+              <X size={15} />
             </button>
           </div>
         </div>
       )}
 
-      <div className="url-bar-wrapper">
-        <Link2 size={20} color="#8b5cf6" style={{ marginRight: '10px' }} />
+      <div className="search-bar-wrapper">
+        <Link2 size={18} color="var(--primary)" style={{ marginRight: '10px' }} />
         <input
           type="text"
-          className="url-input-field"
-          placeholder="Paste YouTube video or Shorts link here (e.g. https://www.youtube.com/watch?v=...)"
+          className="search-input"
+          placeholder={`Paste YouTube video, Short, or playlist link (${pasteShortcut})...`}
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           onKeyDown={handleKeyDown}
           disabled={isLoading}
         />
 
-        <div className="url-bar-actions">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           {url ? (
-            <button className="btn-clear" onClick={() => setUrl('')} title="Clear input">
-              <X size={14} />
-              <span>Clear</span>
+            <button
+              onClick={() => setUrl('')}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--text-muted)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                padding: '4px',
+              }}
+              title="Clear input"
+            >
+              <X size={15} />
             </button>
           ) : (
-            <button className="btn-paste" onClick={handlePasteClick} title="Paste from Clipboard">
-              <ClipboardPaste size={14} />
+            <button
+              onClick={handlePaste}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '6px 10px',
+                borderRadius: 'var(--radius-sm)',
+                background: 'var(--bg-subtle)',
+                border: '1px solid var(--border-default)',
+                color: 'var(--text-secondary)',
+                fontSize: '12px',
+                fontWeight: 500,
+                cursor: 'pointer',
+              }}
+              title="Paste from clipboard"
+            >
+              <ClipboardPaste size={13} />
               <span>Paste</span>
             </button>
           )}
 
           <button
-            className="btn-analyze"
+            className="btn-primary-action"
             onClick={() => onAnalyze()}
             disabled={!url.trim() || isLoading}
           >
@@ -118,8 +165,8 @@ export const UrlInput: React.FC<UrlInputProps> = ({
               </>
             ) : (
               <>
-                <Search size={16} />
-                <span>Analyze Video</span>
+                <span>Analyze</span>
+                <ArrowRight size={15} />
               </>
             )}
           </button>

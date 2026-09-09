@@ -6,15 +6,20 @@ import {
   AppSettings,
   BinaryStatus,
   DownloadRequest,
+  SearchResultItem,
+  PlaylistMetadata,
 } from './types';
+import { clientService, isElectron } from './services/api';
 import { Navbar } from './components/Navbar';
 import { UrlInput } from './components/UrlInput';
 import { VideoPreview } from './components/VideoPreview';
+import { SearchResults } from './components/SearchResults';
+import { PlaylistView } from './components/PlaylistView';
 import { DownloadQueue } from './components/DownloadQueue';
 import { BatchDownloader } from './components/BatchDownloader';
 import { HistoryList } from './components/HistoryList';
 import { SettingsModal } from './components/SettingsModal';
-import { CheckCircle2, AlertCircle, Info, Sparkles } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Info, Sparkles, Loader2 } from 'lucide-react';
 
 interface Toast {
   id: string;
@@ -23,10 +28,11 @@ interface Toast {
 }
 
 export const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'single' | 'batch' | 'queue' | 'history'>('single');
+  const [activeTab, setActiveTab] = useState<'single' | 'search' | 'batch' | 'queue' | 'history'>('single');
   const [url, setUrl] = useState<string>('');
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
   const [videoMetadata, setVideoMetadata] = useState<VideoMetadata | null>(null);
+  const [playlistMetadata, setPlaylistMetadata] = useState<PlaylistMetadata | null>(null);
   const [downloads, setDownloads] = useState<DownloadProgress[]>([]);
   const [history, setHistory] = useState<DownloadHistoryItem[]>([]);
   const [binaryStatus, setBinaryStatus] = useState<BinaryStatus | null>(null);
@@ -36,9 +42,9 @@ export const App: React.FC = () => {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   const [settings, setSettings] = useState<AppSettings>({
-    downloadFolder: 'Downloads/NovaDownloader',
+    downloadFolder: isElectron ? 'Downloads/NovaDownloader' : 'Browser Downloads',
     maxConcurrentDownloads: 3,
-    theme: 'cosmic',
+    theme: 'dark',
     autoDetectClipboard: true,
     preferredVideoQuality: '1080p',
     preferredAudioFormat: 'mp3',
@@ -54,25 +60,27 @@ export const App: React.FC = () => {
     }, 4000);
   };
 
+  // Sync theme
+  const applyTheme = (theme: 'light' | 'dark') => {
+    document.documentElement.setAttribute('data-theme', theme);
+  };
+
+  const toggleTheme = () => {
+    const next = settings.theme === 'dark' ? 'light' : 'dark';
+    handleSaveSettings({ theme: next });
+  };
+
   // Initial Data Fetch
   useEffect(() => {
-    if (!window.electronAPI) return;
-
-    window.electronAPI.getSettings().then((res) => {
+    clientService.getSettings().then((res) => {
       setSettings(res);
-      document.documentElement.setAttribute('data-theme', res.theme || 'cosmic');
+      applyTheme(res.theme || 'dark');
     });
 
-    window.electronAPI.getHistory().then((res) => {
-      setHistory(res);
-    });
+    clientService.getHistory().then(setHistory);
+    clientService.getBinaryStatus().then(setBinaryStatus);
 
-    window.electronAPI.getBinaryStatus().then((res) => {
-      setBinaryStatus(res);
-    });
-
-    // Listen to real-time download progress
-    const unsubscribe = window.electronAPI.onDownloadProgress((prog) => {
+    const unsubscribe = clientService.onDownloadProgress((prog) => {
       setDownloads((prev) => {
         const existingIndex = prev.findIndex((d) => d.id === prog.id);
         if (existingIndex >= 0) {
@@ -84,11 +92,10 @@ export const App: React.FC = () => {
       });
 
       if (prog.status === 'completed') {
-        showToast(`Download finished: ${prog.title}`, 'success');
-        // Refresh history
-        window.electronAPI.getHistory().then(setHistory);
+        showToast(`Downloaded: ${prog.title}`, 'success');
+        clientService.getHistory().then(setHistory);
       } else if (prog.status === 'error') {
-        showToast(`Download failed: ${prog.error || 'Unknown error'}`, 'error');
+        showToast(`Failed: ${prog.error || 'Download failed'}`, 'error');
       }
     });
 
@@ -97,54 +104,58 @@ export const App: React.FC = () => {
     };
   }, []);
 
-  // Theme Sync
+  // Sync Theme attribute
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', settings.theme);
+    applyTheme(settings.theme);
   }, [settings.theme]);
 
-  // Clipboard Polling
+  // Clipboard Polling (Electron)
   useEffect(() => {
-    if (!settings.autoDetectClipboard || !window.electronAPI) return;
+    if (!settings.autoDetectClipboard || !isElectron) return;
 
     let lastClipboardText = '';
-
     const interval = setInterval(async () => {
       try {
-        const text = await window.electronAPI.readClipboard();
+        const text = await clientService.readClipboard();
         if (
           text &&
           text !== lastClipboardText &&
           (text.includes('youtube.com/watch') ||
             text.includes('youtu.be/') ||
-            text.includes('youtube.com/shorts/')) &&
+            text.includes('youtube.com/shorts/') ||
+            text.includes('youtube.com/playlist')) &&
           text !== url
         ) {
           lastClipboardText = text;
           setClipboardUrl(text.trim());
         }
-      } catch {
-        // ignore
-      }
+      } catch {}
     }, 2500);
 
     return () => clearInterval(interval);
   }, [settings.autoDetectClipboard, url]);
 
-  // Analyze URL Action
+  // Analyze URL or Playlist
   const handleAnalyze = async (targetUrl?: string) => {
     const inputUrl = targetUrl || url;
     if (!inputUrl.trim()) return;
 
     setIsAnalyzing(true);
     setVideoMetadata(null);
+    setPlaylistMetadata(null);
     setClipboardUrl(null);
 
     try {
-      const meta = await window.electronAPI.analyzeUrl(inputUrl.trim());
-      setVideoMetadata(meta);
-      showToast(`Found: ${meta.title}`, 'info');
+      const result = await clientService.analyzeUrl(inputUrl.trim());
+      if (result.isPlaylist && result.playlist) {
+        setPlaylistMetadata(result.playlist);
+        showToast(`Loaded playlist: ${result.playlist.title}`, 'info');
+      } else if (result.metadata) {
+        setVideoMetadata(result.metadata);
+        showToast(`Loaded: ${result.metadata.title}`, 'info');
+      }
     } catch (err: any) {
-      showToast(err.message || 'Failed to analyze video URL', 'error');
+      showToast(err.message || 'Failed to analyze link', 'error');
     } finally {
       setIsAnalyzing(false);
     }
@@ -153,51 +164,77 @@ export const App: React.FC = () => {
   // Start Download
   const handleStartDownload = async (req: DownloadRequest) => {
     try {
-      await window.electronAPI.startDownload(req);
-      showToast(`Started downloading: ${req.title}`, 'info');
-      setActiveTab('queue');
+      await clientService.startDownload(req);
+      showToast(`Started: ${req.title}`, 'info');
+      if (isElectron) {
+        setActiveTab('queue');
+      }
     } catch (err: any) {
       showToast(err.message || 'Failed to start download', 'error');
     }
   };
 
+  // In-App Search Video Selection
+  const handleSelectSearchedVideo = (videoUrl: string) => {
+    setUrl(videoUrl);
+    setActiveTab('single');
+    handleAnalyze(videoUrl);
+  };
+
+  // In-App Quick Download from Search
+  const handleQuickDownload = (item: SearchResultItem, formatType: 'video' | 'audio') => {
+    const req: DownloadRequest = {
+      id: `${item.id}-${Date.now()}`,
+      url: item.url,
+      title: item.title,
+      thumbnail: item.thumbnail,
+      channel: item.uploader,
+      formatType,
+      quality: formatType === 'audio' ? 'mp3' : '1080p',
+      audioFormat: 'mp3',
+      outputPath: settings.downloadFolder,
+      embedThumbnail: true,
+    };
+    handleStartDownload(req);
+  };
+
   // Cancel Download
   const handleCancelDownload = async (id: string) => {
     try {
-      await window.electronAPI.cancelDownload(id);
+      await clientService.cancelDownload(id);
       showToast('Download cancelled', 'info');
     } catch (err: any) {
-      showToast(err.message || 'Failed to cancel download', 'error');
+      showToast(err.message || 'Failed to cancel', 'error');
     }
   };
 
-  // Folder Selection
+  // Select Folder
   const handleChangeFolder = async () => {
     try {
-      const folder = await window.electronAPI.selectFolder();
+      const folder = await clientService.selectFolder();
       if (folder) {
-        const updated = await window.electronAPI.saveSettings({ downloadFolder: folder });
+        const updated = await clientService.saveSettings({ downloadFolder: folder });
         setSettings(updated);
-        showToast(`Saved download path: ${folder}`, 'success');
+        showToast(`Download location updated`, 'success');
       }
-    } catch (err: any) {
+    } catch {
       showToast('Failed to select folder', 'error');
     }
   };
 
   const handleOpenDownloadsFolder = async () => {
     try {
-      await window.electronAPI.openFolder(settings.downloadFolder);
+      await clientService.openFolder(settings.downloadFolder);
     } catch {
-      showToast('Failed to open downloads folder', 'error');
+      showToast('Failed to open folder', 'error');
     }
   };
 
   const handleOpenFile = async (filePath: string) => {
     try {
-      await window.electronAPI.openFile(filePath);
+      await clientService.openFile(filePath);
     } catch {
-      showToast('Failed to locate file', 'error');
+      showToast('Failed to open file', 'error');
     }
   };
 
@@ -205,16 +242,16 @@ export const App: React.FC = () => {
   const handleUpdateYtDlp = async () => {
     setIsUpdatingBinary(true);
     try {
-      const res = await window.electronAPI.updateYtDlp();
+      const res = await clientService.updateYtDlp();
       if (res.success) {
         showToast(res.message, 'success');
-        const status = await window.electronAPI.getBinaryStatus();
+        const status = await clientService.getBinaryStatus();
         setBinaryStatus(status);
       } else {
         showToast(res.message, 'error');
       }
     } catch (err: any) {
-      showToast(err.message || 'Failed to update engine', 'error');
+      showToast(err.message || 'Failed to update', 'error');
     } finally {
       setIsUpdatingBinary(false);
     }
@@ -225,18 +262,18 @@ export const App: React.FC = () => {
   };
 
   const handleClearHistory = async () => {
-    await window.electronAPI.clearHistory();
+    await clientService.clearHistory();
     setHistory([]);
     showToast('Download history cleared', 'info');
   };
 
   const handleDeleteHistoryItem = async (id: string) => {
-    await window.electronAPI.deleteHistoryItem(id);
+    await clientService.deleteHistoryItem(id);
     setHistory((prev) => prev.filter((h) => h.id !== id));
   };
 
   const handleSaveSettings = async (updates: Partial<AppSettings>) => {
-    const updated = await window.electronAPI.saveSettings(updates);
+    const updated = await clientService.saveSettings(updates);
     setSettings(updated);
     showToast('Settings saved', 'info');
   };
@@ -251,9 +288,12 @@ export const App: React.FC = () => {
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         activeDownloadsCount={activeDownloadsCount}
+        theme={settings.theme}
+        onToggleTheme={toggleTheme}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenDownloadsFolder={handleOpenDownloadsFolder}
         binaryStatus={binaryStatus}
+        isElectron={isElectron}
       />
 
       <main className="main-view">
@@ -272,49 +312,96 @@ export const App: React.FC = () => {
               onDismissClipboard={() => setClipboardUrl(null)}
             />
 
-            {videoMetadata && (
+            {/* Skeleton Loading Feedback */}
+            {isAnalyzing && (
+              <div
+                className="solid-card"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '16px',
+                  padding: '30px',
+                }}
+              >
+                <Loader2 size={24} className="spin-animation" color="var(--primary)" />
+                <div>
+                  <h4 style={{ fontSize: '15px', color: 'var(--text-primary)' }}>
+                    Analyzing stream formats & resolutions...
+                  </h4>
+                  <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                    Decrypting high-speed video streams via multi-threaded engine.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Video Preview Card */}
+            {videoMetadata && !isAnalyzing && (
               <VideoPreview
                 metadata={videoMetadata}
                 downloadFolder={settings.downloadFolder}
                 onChangeFolder={handleChangeFolder}
                 onStartDownload={handleStartDownload}
+                isElectron={isElectron}
               />
             )}
 
-            {!videoMetadata && !isAnalyzing && (
+            {/* Playlist Preview Card */}
+            {playlistMetadata && !isAnalyzing && (
+              <PlaylistView
+                playlist={playlistMetadata}
+                downloadFolder={settings.downloadFolder}
+                onEnqueueBatch={(requests) => {
+                  for (const req of requests) {
+                    handleStartDownload(req);
+                  }
+                  setActiveTab('queue');
+                }}
+                onClose={() => setPlaylistMetadata(null)}
+              />
+            )}
+
+            {!videoMetadata && !playlistMetadata && !isAnalyzing && (
               <div
-                className="glass-card"
+                className="solid-card"
                 style={{
                   textAlign: 'center',
                   padding: '50px 20px',
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
-                  gap: '14px',
+                  gap: '12px',
                 }}
               >
                 <div
                   style={{
-                    width: '60px',
-                    height: '60px',
-                    borderRadius: '16px',
-                    background: 'var(--accent-gradient)',
+                    width: '48px',
+                    height: '48px',
+                    borderRadius: 'var(--radius-lg)',
+                    backgroundColor: 'var(--primary-subtle)',
+                    color: 'var(--primary)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    color: '#fff',
-                    boxShadow: 'var(--accent-glow)',
                   }}
                 >
-                  <Sparkles size={28} />
+                  <Sparkles size={22} />
                 </div>
-                <h3 style={{ fontSize: '20px' }}>Ready to Download in Highest Quality</h3>
-                <p style={{ color: '#94a3b8', fontSize: '14px', maxWidth: '440px', lineHeight: '1.6' }}>
-                  Paste any YouTube video, Short, or audio URL above to extract up to 4K 60fps video, or crystal clear 320kbps MP3 audio with cover art.
+                <h3 style={{ fontSize: '18px' }}>Paste Any YouTube URL or Search Above</h3>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '13px', maxWidth: '440px', lineHeight: '1.6' }}>
+                  Download individual videos in up to 4K 60fps, extract 320kbps MP3 audio with album art, or paste an entire playlist to download in one click.
                 </p>
               </div>
             )}
           </>
+        )}
+
+        {activeTab === 'search' && (
+          <SearchResults
+            onSelectVideo={handleSelectSearchedVideo}
+            onQuickDownload={handleQuickDownload}
+            onPerformSearch={(q) => clientService.searchYouTube(q)}
+          />
         )}
 
         {activeTab === 'batch' && (
@@ -327,6 +414,7 @@ export const App: React.FC = () => {
               }
             }}
             onSwitchToQueue={() => setActiveTab('queue')}
+            isElectron={isElectron}
           />
         )}
 
@@ -337,6 +425,7 @@ export const App: React.FC = () => {
             onClearCompleted={handleClearCompleted}
             onOpenFile={handleOpenFile}
             onOpenFolder={handleOpenDownloadsFolder}
+            isElectron={isElectron}
           />
         )}
 
@@ -347,6 +436,7 @@ export const App: React.FC = () => {
             onOpenFolder={handleOpenDownloadsFolder}
             onDeleteHistoryItem={handleDeleteHistoryItem}
             onClearHistory={handleClearHistory}
+            isElectron={isElectron}
           />
         )}
       </main>
@@ -361,15 +451,16 @@ export const App: React.FC = () => {
         binaryStatus={binaryStatus}
         onUpdateYtDlp={handleUpdateYtDlp}
         isUpdatingBinary={isUpdatingBinary}
+        isElectron={isElectron}
       />
 
       {/* Toasts */}
       <div className="toast-container">
         {toasts.map((t) => (
-          <div key={t.id} className="toast">
-            {t.type === 'success' && <CheckCircle2 size={16} color="#10b981" />}
-            {t.type === 'error' && <AlertCircle size={16} color="#f87171" />}
-            {t.type === 'info' && <Info size={16} color="#06b6d4" />}
+          <div key={t.id} className="toast-msg">
+            {t.type === 'success' && <CheckCircle2 size={16} color="var(--success)" />}
+            {t.type === 'error' && <AlertCircle size={16} color="var(--danger)" />}
+            {t.type === 'info' && <Info size={16} color="var(--primary)" />}
             <span>{t.message}</span>
           </div>
         ))}

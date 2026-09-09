@@ -8,6 +8,8 @@ import {
 
 const api: ElectronAPI = {
   analyzeUrl: (url: string) => ipcRenderer.invoke('analyze-url', url),
+  searchYouTube: (query: string) => ipcRenderer.invoke('search-youtube', query),
+  extractPlaylist: (url: string) => ipcRenderer.invoke('extract-playlist', url),
   startDownload: (request: DownloadRequest) => ipcRenderer.invoke('start-download', request),
   cancelDownload: (id: string) => ipcRenderer.invoke('cancel-download', id),
   selectFolder: () => ipcRenderer.invoke('select-folder'),

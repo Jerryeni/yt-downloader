@@ -9,6 +9,9 @@ import {
   VideoMetadata,
   VideoFormat,
   DownloadHistoryItem,
+  SearchResultItem,
+  PlaylistMetadata,
+  PlaylistItem,
 } from '../shared/types';
 import { AppStore } from './store';
 
@@ -43,6 +46,117 @@ export class DownloadEngine extends EventEmitter {
     this.store = store;
   }
 
+  /**
+   * Fast In-App YouTube Search
+   */
+  public async searchVideos(query: string, limit = 8): Promise<SearchResultItem[]> {
+    const ytDlp = await this.binaryManager.getYtDlpPath();
+
+    return new Promise((resolve, reject) => {
+      const args = [
+        `ytsearch${limit}:${query}`,
+        '--dump-single-json',
+        '--flat-playlist',
+        '--no-warnings',
+        '--skip-download',
+        '--extractor-args',
+        'youtube:player_client=android,web',
+      ];
+
+      const proc = spawn(ytDlp, args);
+      let stdout = '';
+      let stderr = '';
+
+      proc.stdout.on('data', (d) => (stdout += d.toString()));
+      proc.stderr.on('data', (d) => (stderr += d.toString()));
+
+      proc.on('close', (code) => {
+        if (code !== 0) {
+          return reject(new Error(stderr || `Search failed with code ${code}`));
+        }
+
+        try {
+          const raw = JSON.parse(stdout);
+          const entries: any[] = raw.entries || [];
+          const results: SearchResultItem[] = entries.map((e) => ({
+            id: e.id,
+            url: e.url || `https://www.youtube.com/watch?v=${e.id}`,
+            title: e.title || 'Untitled',
+            uploader: e.uploader || e.channel || 'YouTube Creator',
+            durationFormatted: formatDuration(e.duration || 0),
+            thumbnail: e.thumbnails?.[0]?.url || `https://i.ytimg.com/vi/${e.id}/mqdefault.jpg`,
+            viewCount: e.view_count,
+          }));
+          resolve(results);
+        } catch (err: any) {
+          reject(new Error(`Failed to parse search results: ${err.message}`));
+        }
+      });
+
+      proc.on('error', (err) => reject(new Error(`Failed to execute search: ${err.message}`)));
+    });
+  }
+
+  /**
+   * Fast Playlist Item Extractor
+   */
+  public async extractPlaylist(url: string): Promise<PlaylistMetadata> {
+    const ytDlp = await this.binaryManager.getYtDlpPath();
+
+    return new Promise((resolve, reject) => {
+      const args = [
+        url,
+        '--dump-single-json',
+        '--flat-playlist',
+        '--no-warnings',
+        '--skip-download',
+        '--extractor-args',
+        'youtube:player_client=android,web',
+      ];
+
+      const proc = spawn(ytDlp, args);
+      let stdout = '';
+      let stderr = '';
+
+      proc.stdout.on('data', (d) => (stdout += d.toString()));
+      proc.stderr.on('data', (d) => (stderr += d.toString()));
+
+      proc.on('close', (code) => {
+        if (code !== 0) {
+          return reject(new Error(stderr || `Playlist extraction failed with code ${code}`));
+        }
+
+        try {
+          const raw = JSON.parse(stdout);
+          const entries: any[] = raw.entries || [];
+          const items: PlaylistItem[] = entries.map((e, index) => ({
+            id: e.id,
+            url: e.url || `https://www.youtube.com/watch?v=${e.id}`,
+            title: e.title || `Track #${index + 1}`,
+            durationFormatted: formatDuration(e.duration || 0),
+            thumbnail: e.thumbnails?.[0]?.url || `https://i.ytimg.com/vi/${e.id}/mqdefault.jpg`,
+            index: index + 1,
+          }));
+
+          resolve({
+            id: raw.id || 'playlist',
+            title: raw.title || 'YouTube Playlist',
+            uploader: raw.uploader || raw.channel || 'YouTube',
+            itemCount: items.length,
+            items,
+          });
+        } catch (err: any) {
+          reject(new Error(`Failed to parse playlist: ${err.message}`));
+        }
+      });
+
+      proc.on('error', (err) => reject(new Error(`Failed to extract playlist: ${err.message}`)));
+    });
+  }
+
+  /**
+   * Accelerated Video Metadata Extraction
+   */
   public async extractMetadata(url: string): Promise<VideoMetadata> {
     const ytDlp = await this.binaryManager.getYtDlpPath();
 
@@ -52,6 +166,10 @@ export class DownloadEngine extends EventEmitter {
         '--no-warnings',
         '--no-playlist',
         '--skip-download',
+        '--extractor-args',
+        'youtube:player_client=android,web',
+        '--js-runtimes',
+        'node',
         url,
       ];
 
@@ -76,12 +194,8 @@ export class DownloadEngine extends EventEmitter {
           const raw = JSON.parse(stdout);
           const rawFormats: any[] = raw.formats || [];
 
-          // Parse and group video formats
           const videoFormatsMap = new Map<string, VideoFormat>();
           const audioFormats: VideoFormat[] = [];
-
-          // Standard common resolutions we want to present cleanly
-          const desiredHeights = [2160, 1440, 1080, 720, 480, 360];
 
           for (const f of rawFormats) {
             const isAudio = f.vcodec === 'none' && f.acodec !== 'none';
@@ -103,12 +217,11 @@ export class DownloadEngine extends EventEmitter {
               const existing = videoFormatsMap.get(resKey);
               const currentFilesize = f.filesize || f.filesize_approx || 0;
 
-              // Keep higher quality / fps for the same resolution
               if (!existing || (f.fps && f.fps > (existing.fps || 30)) || currentFilesize > (existing.filesize || 0)) {
                 videoFormatsMap.set(resKey, {
                   formatId: f.format_id,
                   resolution: `${f.height}p${f.fps && f.fps > 30 ? f.fps : ''}`,
-                  ext: f.ext === 'mp4' ? 'mp4' : 'mp4', // we can remux to mp4
+                  ext: 'mp4',
                   filesize: currentFilesize,
                   filesizeFormatted: formatBytes(currentFilesize),
                   fps: f.fps,
@@ -122,12 +235,10 @@ export class DownloadEngine extends EventEmitter {
             }
           }
 
-          // Sort formats
           const videoFormats = Array.from(videoFormatsMap.values()).sort(
             (a, b) => b.qualityRank - a.qualityRank
           );
 
-          // Subtitles
           const subtitles: Array<{ lang: string; name: string }> = [];
           if (raw.subtitles) {
             for (const lang of Object.keys(raw.subtitles)) {
@@ -168,6 +279,9 @@ export class DownloadEngine extends EventEmitter {
     });
   }
 
+  /**
+   * Ultra-Fast Multi-Threaded Download Engine
+   */
   public async startDownload(request: DownloadRequest): Promise<void> {
     const ytDlp = await this.binaryManager.getYtDlpPath();
     const ffmpeg = await this.binaryManager.getFfmpegPath();
@@ -182,6 +296,23 @@ export class DownloadEngine extends EventEmitter {
     const args: string[] = [
       '--newline',
       '--no-playlist',
+      // High speed multi-threading: 8 parallel fragment downloads!
+      '-N',
+      '8',
+      '--concurrent-fragments',
+      '8',
+      '--buffer-size',
+      '64K',
+      '--http-chunk-size',
+      '10M',
+      '--retries',
+      '10',
+      '--fragment-retries',
+      '10',
+      '--extractor-args',
+      'youtube:player_client=android,web',
+      '--js-runtimes',
+      'node',
       '--progress-template',
       'NOVAPROGRESS|%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s|%(progress._total_bytes_estimate_str)s|%(progress._downloaded_bytes_str)s',
       '-o',
@@ -201,7 +332,7 @@ export class DownloadEngine extends EventEmitter {
       }
       args.push('--add-metadata');
     } else {
-      // Video format
+      // Video format selection with audio remux
       if (request.quality === 'best') {
         args.push('-f', 'bestvideo+bestaudio/best', '--merge-output-format', 'mp4');
       } else if (request.quality.includes('p')) {
@@ -254,7 +385,6 @@ export class DownloadEngine extends EventEmitter {
       for (const line of lines) {
         if (line.includes('NOVAPROGRESS|')) {
           const parts = line.split('|');
-          // Format: NOVAPROGRESS|percent|speed|eta|total_bytes|downloaded_bytes
           if (parts.length >= 6) {
             const rawPercent = parts[1].replace('%', '').trim();
             const percent = parseFloat(rawPercent) || 0;
@@ -301,7 +431,6 @@ export class DownloadEngine extends EventEmitter {
         progressObj.completedAt = Date.now();
         this.emit('progress', { ...progressObj });
 
-        // Add to history
         const historyItem: DownloadHistoryItem = {
           id: request.id,
           title: request.title,

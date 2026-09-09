@@ -7,6 +7,7 @@ interface BatchDownloaderProps {
   onChangeFolder: () => void;
   onEnqueueBatch: (requests: DownloadRequest[]) => void;
   onSwitchToQueue: () => void;
+  isElectron: boolean;
 }
 
 export const BatchDownloader: React.FC<BatchDownloaderProps> = ({
@@ -14,6 +15,7 @@ export const BatchDownloader: React.FC<BatchDownloaderProps> = ({
   onChangeFolder,
   onEnqueueBatch,
   onSwitchToQueue,
+  isElectron,
 }) => {
   const [urlsText, setUrlsText] = useState('');
   const [formatType, setFormatType] = useState<'video' | 'audio'>('video');
@@ -53,69 +55,69 @@ export const BatchDownloader: React.FC<BatchDownloaderProps> = ({
     .filter((u) => u.length > 0 && (u.includes('http://') || u.includes('https://'))).length;
 
   return (
-    <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+    <div className="solid-card" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
         <div
           style={{
             width: '40px',
             height: '40px',
-            borderRadius: '10px',
-            background: 'rgba(139, 92, 246, 0.15)',
-            color: '#a78bfa',
+            borderRadius: 'var(--radius-md)',
+            backgroundColor: 'var(--primary-subtle)',
+            color: 'var(--primary)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
           }}
         >
-          <Layers size={22} />
+          <Layers size={20} />
         </div>
         <div>
-          <h2 style={{ fontSize: '18px' }}>Batch & Multiple Links Downloader</h2>
-          <p style={{ color: '#94a3b8', fontSize: '13px' }}>
-            Paste multiple YouTube video URLs (one per line) to download all of them sequentially.
+          <h2 style={{ fontSize: '17px' }}>Batch Link Downloader</h2>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>
+            Paste multiple YouTube video URLs (one per line) to download all of them in parallel.
           </p>
         </div>
       </div>
 
       <textarea
-        rows={7}
-        className="url-input-field"
+        rows={6}
+        className="search-input"
         style={{
           width: '100%',
-          background: 'rgba(0,0,0,0.4)',
-          border: '1px solid rgba(255,255,255,0.1)',
-          borderRadius: '12px',
-          padding: '14px',
+          background: 'var(--bg-subtle)',
+          border: '1px solid var(--border-default)',
+          borderRadius: 'var(--radius-md)',
+          padding: '12px',
           fontFamily: 'var(--font-mono)',
           fontSize: '13px',
           resize: 'vertical',
         }}
-        placeholder="https://www.youtube.com/watch?v=...\nhttps://www.youtube.com/watch?v=...\nhttps://youtu.be/..."
+        placeholder="https://www.youtube.com/watch?v=...&#10;https://www.youtube.com/watch?v=...&#10;https://youtu.be/..."
         value={urlsText}
         onChange={(e) => setUrlsText(e.target.value)}
       />
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-          <div className="format-toggle-bar">
+          <div className="segmented-nav">
             <button
-              className={`format-toggle-btn ${formatType === 'video' ? 'active' : ''}`}
+              className={`segmented-btn ${formatType === 'video' ? 'active' : ''}`}
               onClick={() => {
                 setFormatType('video');
                 setQuality('1080p');
               }}
             >
-              <Video size={14} />
+              <Video size={13} />
               <span>Video (MP4)</span>
             </button>
             <button
-              className={`format-toggle-btn ${formatType === 'audio' ? 'active' : ''}`}
+              className={`segmented-btn ${formatType === 'audio' ? 'active' : ''}`}
               onClick={() => {
                 setFormatType('audio');
                 setQuality('mp3');
               }}
             >
-              <Music size={14} />
+              <Music size={13} />
               <span>Audio (MP3)</span>
             </button>
           </div>
@@ -125,13 +127,13 @@ export const BatchDownloader: React.FC<BatchDownloaderProps> = ({
               value={quality}
               onChange={(e) => setQuality(e.target.value as any)}
               style={{
-                background: 'rgba(0,0,0,0.4)',
-                border: '1px solid rgba(255,255,255,0.12)',
-                color: '#fff',
-                padding: '6px 12px',
-                borderRadius: '8px',
-                fontSize: '13px',
-                fontWeight: 500,
+                background: 'var(--bg-subtle)',
+                border: '1px solid var(--border-default)',
+                color: 'var(--text-primary)',
+                padding: '6px 10px',
+                borderRadius: 'var(--radius-sm)',
+                fontSize: '12px',
+                fontWeight: 600,
               }}
             >
               <option value="best">Best Available (4K / 1080p)</option>
@@ -141,41 +143,41 @@ export const BatchDownloader: React.FC<BatchDownloaderProps> = ({
           )}
         </div>
 
-        <div className="destination-display">
-          <Folder size={15} />
-          <span className="destination-path" title={downloadFolder}>
-            {downloadFolder}
-          </span>
-          <button
-            onClick={onChangeFolder}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: '#8b5cf6',
-              cursor: 'pointer',
-              fontSize: '12px',
-              fontWeight: 600,
-              textDecoration: 'underline',
-            }}
-          >
-            Change
-          </button>
-        </div>
+        {isElectron && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+            <Folder size={14} />
+            <span style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {downloadFolder}
+            </span>
+            <button
+              onClick={onChangeFolder}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--primary)',
+                cursor: 'pointer',
+                fontSize: '12px',
+                fontWeight: 600,
+              }}
+            >
+              Change
+            </button>
+          </div>
+        )}
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '10px', borderTop: '1px solid var(--border-subtle)' }}>
-        <span style={{ fontSize: '13px', color: '#94a3b8' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '12px', borderTop: '1px solid var(--border-default)' }}>
+        <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
           {parsedUrlCount} {parsedUrlCount === 1 ? 'URL' : 'URLs'} detected
         </span>
 
         <button
-          className="btn-download-hero"
+          className="btn-primary-action"
           disabled={parsedUrlCount === 0}
           onClick={handleStartBatch}
-          style={{ opacity: parsedUrlCount === 0 ? 0.4 : 1 }}
         >
-          <Download size={16} />
-          <span>Start Batch ({parsedUrlCount})</span>
+          <Download size={15} />
+          <span>Start Batch Download ({parsedUrlCount})</span>
         </button>
       </div>
     </div>

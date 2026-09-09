@@ -31,6 +31,33 @@ export interface VideoMetadata {
   subtitles: Array<{ lang: string; name: string }>;
 }
 
+export interface SearchResultItem {
+  id: string;
+  url: string;
+  title: string;
+  uploader: string;
+  durationFormatted: string;
+  thumbnail: string;
+  viewCount?: number;
+}
+
+export interface PlaylistItem {
+  id: string;
+  url: string;
+  title: string;
+  durationFormatted: string;
+  thumbnail: string;
+  index: number;
+}
+
+export interface PlaylistMetadata {
+  id: string;
+  title: string;
+  uploader: string;
+  itemCount: number;
+  items: PlaylistItem[];
+}
+
 export interface DownloadRequest {
   id: string;
   url: string;
@@ -81,7 +108,7 @@ export interface DownloadHistoryItem {
 export interface AppSettings {
   downloadFolder: string;
   maxConcurrentDownloads: number;
-  theme: 'cosmic' | 'midnight' | 'cyber' | 'light';
+  theme: 'light' | 'dark';
   autoDetectClipboard: boolean;
   preferredVideoQuality: string;
   preferredAudioFormat: string;
@@ -104,6 +131,8 @@ export interface BinaryStatus {
 
 export interface ElectronAPI {
   analyzeUrl: (url: string) => Promise<VideoMetadata>;
+  searchYouTube: (query: string) => Promise<SearchResultItem[]>;
+  extractPlaylist: (url: string) => Promise<PlaylistMetadata>;
   startDownload: (request: DownloadRequest) => Promise<{ success: boolean; id: string }>;
   cancelDownload: (id: string) => Promise<boolean>;
   selectFolder: () => Promise<string | null>;

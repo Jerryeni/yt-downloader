@@ -1,8 +1,5 @@
 import React, { useState } from 'react';
-import {
-  VideoMetadata,
-  DownloadRequest,
-} from '../types';
+import { VideoMetadata, DownloadRequest } from '../types';
 import {
   Video,
   Music,
@@ -11,7 +8,6 @@ import {
   Subtitles,
   Image as ImageIcon,
   Eye,
-  Check,
 } from 'lucide-react';
 
 interface VideoPreviewProps {
@@ -19,6 +15,7 @@ interface VideoPreviewProps {
   downloadFolder: string;
   onChangeFolder: () => void;
   onStartDownload: (request: DownloadRequest) => void;
+  isElectron: boolean;
 }
 
 export const VideoPreview: React.FC<VideoPreviewProps> = ({
@@ -26,6 +23,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
   downloadFolder,
   onChangeFolder,
   onStartDownload,
+  isElectron,
 }) => {
   const [formatType, setFormatType] = useState<'video' | 'audio'>('video');
   const [selectedQuality, setSelectedQuality] = useState<string>('best');
@@ -36,11 +34,9 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
   );
   const [embedThumbnail, setEmbedThumbnail] = useState<boolean>(true);
 
-  // Highest resolution available badge
   const highestFormat = metadata.videoFormats[0];
   const maxRes = highestFormat?.resolution || 'HD';
 
-  // Format view count
   const formatViews = (views: number) => {
     if (views >= 1000000) return `${(views / 1000000).toFixed(1)}M views`;
     if (views >= 1000) return `${(views / 1000).toFixed(1)}K views`;
@@ -66,26 +62,40 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
   };
 
   return (
-    <div className="video-preview-card">
-      {/* Left: Thumbnail & Media Tags */}
-      <div className="preview-media">
+    <div className="media-preview-container">
+      {/* Left: Thumbnail & Duration */}
+      <div className="preview-media-frame">
         <img
           src={metadata.thumbnail}
           alt={metadata.title}
-          className="preview-thumbnail"
+          className="preview-media-img"
         />
-        <div className="preview-badge-quality">{maxRes}</div>
-        <div className="preview-duration">{metadata.durationFormatted}</div>
+        <div className="preview-media-badge">{maxRes}</div>
+        <div
+          style={{
+            position: 'absolute',
+            bottom: '8px',
+            right: '8px',
+            background: 'rgba(0,0,0,0.85)',
+            color: '#fff',
+            fontSize: '11px',
+            fontFamily: 'var(--font-mono)',
+            padding: '2px 6px',
+            borderRadius: 'var(--radius-sm)',
+          }}
+        >
+          {metadata.durationFormatted}
+        </div>
       </div>
 
-      {/* Right: Metadata & Download Controls */}
-      <div className="preview-details">
-        <div className="video-header-info">
-          <h2 className="video-title" title={metadata.title}>
+      {/* Right: Info & Controls */}
+      <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '18px' }}>
+        <div>
+          <h2 style={{ fontSize: '18px', lineHeight: '1.35', marginBottom: '6px' }} title={metadata.title}>
             {metadata.title}
           </h2>
-          <div className="video-meta-row">
-            <span className="meta-channel">{metadata.uploader}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+            <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{metadata.uploader}</span>
             <span>•</span>
             <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               <Eye size={14} />
@@ -94,117 +104,109 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
           </div>
         </div>
 
-        {/* Format Selector: Video vs Audio */}
+        {/* Video vs Audio Segmented Toggle */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          <div className="format-toggle-bar">
+          <div className="segmented-nav" style={{ width: 'fit-content' }}>
             <button
-              className={`format-toggle-btn ${formatType === 'video' ? 'active' : ''}`}
+              className={`segmented-btn ${formatType === 'video' ? 'active' : ''}`}
               onClick={() => {
                 setFormatType('video');
                 setSelectedQuality('best');
               }}
             >
-              <Video size={15} />
+              <Video size={14} />
               <span>Video (MP4)</span>
             </button>
             <button
-              className={`format-toggle-btn ${formatType === 'audio' ? 'active' : ''}`}
+              className={`segmented-btn ${formatType === 'audio' ? 'active' : ''}`}
               onClick={() => {
                 setFormatType('audio');
                 setSelectedQuality('mp3');
               }}
             >
-              <Music size={15} />
+              <Music size={14} />
               <span>Audio Only (MP3 / FLAC)</span>
             </button>
           </div>
 
-          {/* Quality Grid */}
+          {/* Quality Cards Grid */}
           {formatType === 'video' ? (
-            <div className="quality-chips-grid">
+            <div className="format-card-grid">
               <div
-                className={`quality-chip ${selectedQuality === 'best' ? 'selected' : ''}`}
+                className={`format-card ${selectedQuality === 'best' ? 'selected' : ''}`}
                 onClick={() => setSelectedQuality('best')}
               >
-                <span className="chip-label">Best Available</span>
-                <span className="chip-size">Max Quality</span>
+                <span className="format-label">Best Quality</span>
+                <span className="format-sub">Original 4K/HD</span>
               </div>
 
               {metadata.videoFormats.slice(0, 5).map((f) => (
                 <div
                   key={f.formatId}
-                  className={`quality-chip ${selectedQuality === f.resolution ? 'selected' : ''}`}
+                  className={`format-card ${selectedQuality === f.resolution ? 'selected' : ''}`}
                   onClick={() => setSelectedQuality(f.resolution || f.formatId)}
                 >
-                  <span className="chip-label">{f.resolution}</span>
-                  <span className="chip-size">
+                  <span className="format-label">{f.resolution}</span>
+                  <span className="format-sub">
                     {f.filesizeFormatted !== 'Unknown size' ? f.filesizeFormatted : `${f.fps || 30} fps`}
                   </span>
                 </div>
               ))}
             </div>
           ) : (
-            <div className="quality-chips-grid">
+            <div className="format-card-grid">
               {[
-                { id: 'mp3', label: 'MP3 (320kbps)', sub: 'Ultra High Quality' },
-                { id: 'm4a', label: 'M4A (AAC)', sub: 'Apple / Universal' },
+                { id: 'mp3', label: 'MP3 (320k)', sub: 'High Quality' },
+                { id: 'm4a', label: 'M4A (AAC)', sub: 'Apple / Fast' },
                 { id: 'flac', label: 'FLAC', sub: 'Hi-Fi Lossless' },
-                { id: 'wav', label: 'WAV', sub: 'Uncompressed' },
+                { id: 'wav', label: 'WAV', sub: 'Raw Studio' },
               ].map((a) => (
                 <div
                   key={a.id}
-                  className={`quality-chip ${selectedAudioFormat === a.id ? 'selected' : ''}`}
+                  className={`format-card ${selectedAudioFormat === a.id ? 'selected' : ''}`}
                   onClick={() => setSelectedAudioFormat(a.id as any)}
                 >
-                  <span className="chip-label">{a.label}</span>
-                  <span className="chip-size">{a.sub}</span>
+                  <span className="format-label">{a.label}</span>
+                  <span className="format-sub">{a.sub}</span>
                 </div>
               ))}
             </div>
           )}
 
-          {/* Additional Options */}
-          <div className="options-row">
-            <label className="checkbox-label">
+          {/* Options: Subtitles & Cover Art */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
               <input
                 type="checkbox"
                 checked={embedThumbnail}
                 onChange={(e) => setEmbedThumbnail(e.target.checked)}
-                style={{ display: 'none' }}
               />
-              <div className="checkbox-custom">
-                {embedThumbnail && <Check size={12} color="#fff" />}
-              </div>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <ImageIcon size={14} />
                 Embed Cover Art
               </span>
             </label>
 
             {formatType === 'video' && metadata.subtitles.length > 0 && (
-              <label className="checkbox-label">
+              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
                 <input
                   type="checkbox"
                   checked={embedSubtitles}
                   onChange={(e) => setEmbedSubtitles(e.target.checked)}
-                  style={{ display: 'none' }}
                 />
-                <div className="checkbox-custom">
-                  {embedSubtitles && <Check size={12} color="#fff" />}
-                </div>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                   <Subtitles size={14} />
-                  Embed Subtitles:
+                  Embed Subtitles
                 </span>
                 {embedSubtitles && (
                   <select
                     value={selectedSubtitleLang}
                     onChange={(e) => setSelectedSubtitleLang(e.target.value)}
                     style={{
-                      background: 'rgba(0,0,0,0.4)',
-                      border: '1px solid rgba(255,255,255,0.1)',
-                      color: '#fff',
-                      padding: '2px 8px',
+                      background: 'var(--bg-subtle)',
+                      border: '1px solid var(--border-default)',
+                      color: 'var(--text-primary)',
+                      padding: '2px 6px',
                       borderRadius: '4px',
                       fontSize: '12px',
                     }}
@@ -221,32 +223,37 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
           </div>
         </div>
 
-        {/* Action Footer */}
-        <div className="preview-action-footer">
-          <div className="destination-display">
-            <Folder size={16} />
-            <span>Save to:</span>
-            <span className="destination-path" title={downloadFolder}>
-              {downloadFolder}
+        {/* Footer: Destination + Download CTA */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '14px', borderTop: '1px solid var(--border-default)' }}>
+          {isElectron ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+              <Folder size={14} />
+              <span>Save to:</span>
+              <span style={{ maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500 }}>
+                {downloadFolder}
+              </span>
+              <button
+                onClick={onChangeFolder}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--primary)',
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                  fontSize: '12px',
+                }}
+              >
+                Change
+              </button>
+            </div>
+          ) : (
+            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+              Saved to your browser / mobile Downloads folder
             </span>
-            <button
-              onClick={onChangeFolder}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                color: '#8b5cf6',
-                cursor: 'pointer',
-                fontSize: '12px',
-                fontWeight: 600,
-                textDecoration: 'underline',
-              }}
-            >
-              Change
-            </button>
-          </div>
+          )}
 
-          <button className="btn-download-hero" onClick={handleDownload}>
-            <Download size={18} />
+          <button className="btn-primary-action" onClick={handleDownload}>
+            <Download size={16} />
             <span>Download {formatType === 'video' ? 'Video' : 'Audio'}</span>
           </button>
         </div>
