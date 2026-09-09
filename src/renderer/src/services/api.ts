@@ -120,6 +120,20 @@ export const clientService = {
     return true;
   },
 
+  async retryDownload(id: string): Promise<boolean> {
+    if (isElectron) {
+      return await window.electronAPI.retryDownload(id);
+    }
+    return false;
+  },
+
+  async retryAllFailed(): Promise<number> {
+    if (isElectron) {
+      return await window.electronAPI.retryAllFailed();
+    }
+    return 0;
+  },
+
   async selectFolder(): Promise<string | null> {
     if (isElectron) {
       return await window.electronAPI.selectFolder();

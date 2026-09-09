@@ -132,6 +132,14 @@ ipcMain.handle('cancel-download', async (_event, id: string) => {
   return downloadEngine.cancelDownload(id);
 });
 
+ipcMain.handle('retry-download', async (_event, id: string) => {
+  return downloadEngine.retryDownload(id);
+});
+
+ipcMain.handle('retry-all-failed', async () => {
+  return downloadEngine.retryAllFailed();
+});
+
 ipcMain.handle('select-folder', async () => {
   if (!mainWindow) return null;
   const result = await dialog.showOpenDialog(mainWindow, {

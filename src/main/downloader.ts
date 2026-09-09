@@ -41,6 +41,10 @@ export class DownloadEngine extends EventEmitter {
   private binaryManager: BinaryManager;
   private store: AppStore;
   private activeProcesses: Map<string, ChildProcess> = new Map();
+  private downloadQueue: DownloadRequest[] = [];
+  private runningDownloads: Set<string> = new Set();
+  private failedRequests: Map<string, DownloadRequest> = new Map();
+  private maxConcurrent: number = 2; // Prevent network & DNS socket exhaustion during large batch downloads
 
   constructor(binaryManager: BinaryManager, store: AppStore) {
     super();
@@ -325,9 +329,112 @@ export class DownloadEngine extends EventEmitter {
   }
 
   /**
-   * Ultra-Fast Multi-Threaded Download Engine
+   * Queue-Managed Ultra-Fast Download Engine
    */
   public async startDownload(request: DownloadRequest): Promise<void> {
+    // If running processes are below concurrency limit, execute immediately
+    if (this.runningDownloads.size < this.maxConcurrent) {
+      this.runningDownloads.add(request.id);
+      this.emit('progress', {
+        id: request.id,
+        url: request.url,
+        title: request.title,
+        thumbnail: request.thumbnail,
+        percent: 0,
+        speed: '0 MB/s',
+        eta: '--:--',
+        downloadedBytes: '0 MB',
+        totalBytes: 'Starting...',
+        status: 'downloading',
+        startedAt: Date.now(),
+        batchId: request.batchId,
+        batchTitle: request.batchTitle,
+        itemIndex: request.itemIndex,
+      });
+      this.executeDownload(request);
+    } else {
+      // Put in queue and notify frontend
+      this.downloadQueue.push(request);
+      this.emit('progress', {
+        id: request.id,
+        url: request.url,
+        title: request.title,
+        thumbnail: request.thumbnail,
+        percent: 0,
+        speed: 'Queued',
+        eta: 'Waiting in queue...',
+        downloadedBytes: '0 MB',
+        totalBytes: 'In Queue',
+        status: 'queued',
+        startedAt: Date.now(),
+        batchId: request.batchId,
+        batchTitle: request.batchTitle,
+        itemIndex: request.itemIndex,
+      });
+    }
+  }
+
+  private processNextInQueue(): void {
+    if (this.runningDownloads.size >= this.maxConcurrent) return;
+    if (this.downloadQueue.length === 0) return;
+
+    const nextRequest = this.downloadQueue.shift();
+    if (nextRequest) {
+      this.runningDownloads.add(nextRequest.id);
+      this.executeDownload(nextRequest);
+    }
+  }
+
+  public retryDownload(id: string): boolean {
+    const request = this.failedRequests.get(id);
+    if (request) {
+      this.failedRequests.delete(id);
+      this.startDownload(request);
+      return true;
+    }
+    return false;
+  }
+
+  public retryAllFailed(): number {
+    const failedList = Array.from(this.failedRequests.values());
+    this.failedRequests.clear();
+    for (const req of failedList) {
+      this.startDownload(req);
+    }
+    return failedList.length;
+  }
+
+  private sanitizeErrorMessage(rawError: string): string {
+    if (!rawError) return 'Download failed';
+    if (
+      rawError.includes('nodename nor servname provided') ||
+      rawError.includes('getaddrinfo failed') ||
+      rawError.includes('Temporary failure in name resolution') ||
+      rawError.includes('Errno 8')
+    ) {
+      return 'Network / DNS connection timed out. Please check your internet connection and click Retry.';
+    }
+    if (rawError.includes('The read operation timed out') || rawError.includes('timed out')) {
+      return 'Connection timed out while streaming from YouTube. Click Retry.';
+    }
+    if (rawError.includes('Video unavailable') || rawError.includes('This video is not available')) {
+      return 'This video is unavailable or restricted by YouTube.';
+    }
+    if (rawError.includes('Private video')) {
+      return 'This video is private.';
+    }
+    if (rawError.includes('Sign in to confirm your age')) {
+      return 'Age-restricted video requiring YouTube sign-in.';
+    }
+    const errorLines = rawError.split('\n').filter((l) => l.trim().startsWith('ERROR:'));
+    if (errorLines.length > 0) {
+      return errorLines[0].replace(/^ERROR:\s*/, '').trim();
+    }
+    const cleaned = rawError.replace(/WARNING:.*?\n/g, '').trim();
+    return cleaned.length > 120 ? cleaned.slice(0, 120) + '...' : cleaned || 'Download failed';
+  }
+
+  private async executeDownload(request: DownloadRequest): Promise<void> {
     const ytDlp = await this.binaryManager.getYtDlpPath();
     const ffmpeg = await this.binaryManager.getFfmpegPath();
 
@@ -341,10 +448,13 @@ export class DownloadEngine extends EventEmitter {
     const args: string[] = [
       '--newline',
       '--no-playlist',
+      '--socket-timeout',
+      '20',
+      '--no-check-certificates',
       '-N',
-      '8',
+      '4',
       '--concurrent-fragments',
-      '8',
+      '4',
       '--buffer-size',
       '64K',
       '--http-chunk-size',
@@ -353,10 +463,10 @@ export class DownloadEngine extends EventEmitter {
       '10',
       '--fragment-retries',
       '10',
+      '--retry-sleep',
+      '2',
       '--extractor-args',
-      'youtube:player_client=android,web',
-      '--js-runtimes',
-      'node',
+      'youtube:player_client=android,web,ios',
       '--progress-template',
       'NOVAPROGRESS|%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s|%(progress._total_bytes_estimate_str)s|%(progress._downloaded_bytes_str)s',
       '-o',
@@ -450,13 +560,7 @@ export class DownloadEngine extends EventEmitter {
         } else if (line.includes('[Merger]') || line.includes('[ExtractAudio]') || line.includes('[Fixup')) {
           progressObj.status = 'processing';
           this.emit('progress', { ...progressObj });
-        }
-        
-        if (line.includes('[download] Destination:')) {
-          downloadedFilePath = line.replace('[download] Destination:', '').trim();
-        } else if (line.includes('[ExtractAudio] Destination:')) {
-          downloadedFilePath = line.replace('[ExtractAudio] Destination:', '').trim();
-        } else if (line.includes('[Merger] Merging formats into')) {
+        } else if (line.includes('Merging formats into "')) {
           const match = line.match(/Merging formats into "([^"]+)"/);
           if (match) {
             downloadedFilePath = match[1];
@@ -475,16 +579,22 @@ export class DownloadEngine extends EventEmitter {
       stderrOutput += data.toString();
     });
 
-    proc.on('close', (code) => {
+    const cleanupAndNext = () => {
       this.activeProcesses.delete(request.id);
+      this.runningDownloads.delete(request.id);
+      this.processNextInQueue();
+    };
+
+    proc.on('close', (code) => {
+      cleanupAndNext();
 
       if (code === 0) {
-        // Fallback: If path wasn't captured from stdout lines, look for file in outputFolder
+        this.failedRequests.delete(request.id);
+
         if (!downloadedFilePath || !fs.existsSync(downloadedFilePath)) {
           try {
             if (fs.existsSync(outputFolder)) {
               const files = fs.readdirSync(outputFolder);
-              // Find most recent file matching request title or URL id
               const matching = files
                 .filter((f) => f.includes(request.title.slice(0, 20)) || f.endsWith('.mp4') || f.endsWith('.mp3'))
                 .map((f) => ({
@@ -520,31 +630,47 @@ export class DownloadEngine extends EventEmitter {
         };
         this.store.addHistoryItem(historyItem);
       } else if (progressObj.status !== 'cancelled') {
+        this.failedRequests.set(request.id, request);
         progressObj.status = 'error';
-        progressObj.error = stderrOutput || `Download failed with exit code ${code}`;
+        progressObj.error = this.sanitizeErrorMessage(stderrOutput || `Download failed with exit code ${code}`);
         this.emit('progress', { ...progressObj });
       }
     });
 
     proc.on('error', (err) => {
-      this.activeProcesses.delete(request.id);
+      cleanupAndNext();
+      this.failedRequests.set(request.id, request);
       progressObj.status = 'error';
-      progressObj.error = err.message;
+      progressObj.error = this.sanitizeErrorMessage(err.message);
       this.emit('progress', { ...progressObj });
     });
   }
 
   public cancelDownload(id: string): boolean {
-    const proc = this.activeProcesses.get(id);
-    if (proc) {
-      proc.kill('SIGTERM');
-      this.activeProcesses.delete(id);
+    const queueIdx = this.downloadQueue.findIndex((r) => r.id === id);
+    if (queueIdx !== -1) {
+      this.downloadQueue.splice(queueIdx, 1);
       this.emit('progress', {
         id,
         percent: 0,
         status: 'cancelled',
         error: 'Download cancelled by user',
       });
+      return true;
+    }
+
+    const proc = this.activeProcesses.get(id);
+    if (proc) {
+      proc.kill('SIGTERM');
+      this.activeProcesses.delete(id);
+      this.runningDownloads.delete(id);
+      this.emit('progress', {
+        id,
+        percent: 0,
+        status: 'cancelled',
+        error: 'Download cancelled by user',
+      });
+      this.processNextInQueue();
       return true;
     }
     return false;

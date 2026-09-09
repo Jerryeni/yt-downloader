@@ -43,7 +43,7 @@ jobs:
         if: matrix.os == 'macos-latest'
         run: |
           mkdir -p release
-          zip -r release/NovaDownloader-1.0.1-web-pwa.zip dist/ package.json package-lock.json server/ index.html public/ README.md
+          zip -r release/NovaDownloader-Web-PWA.zip dist/ package.json package-lock.json server/ index.html public/ README.md
 
       - name: Build Windows Artifacts (EXE & Portable)
         if: matrix.os == 'windows-latest'

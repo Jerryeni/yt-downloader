@@ -283,6 +283,52 @@ export const App: React.FC = () => {
     }
   };
 
+  // Retry Download
+  const handleRetryDownload = async (id: string) => {
+    try {
+      const ok = await clientService.retryDownload(id);
+      if (ok) {
+        showToast('Retrying download...', 'info');
+      } else {
+        // Fallback: check if we have the request in downloads
+        const dl = downloads.find((d) => d.id === id);
+        if (dl) {
+          handleStartDownload({
+            id: dl.id,
+            url: dl.url,
+            title: dl.title,
+            thumbnail: dl.thumbnail,
+            formatType: 'video',
+            quality: '1080p',
+            outputPath: settings.downloadFolder,
+            batchId: dl.batchId,
+            batchTitle: dl.batchTitle,
+            itemIndex: dl.itemIndex,
+          });
+        }
+      }
+    } catch (err: any) {
+      showToast(err.message || 'Failed to retry', 'error');
+    }
+  };
+
+  // Retry All Failed Downloads
+  const handleRetryAllFailed = async () => {
+    try {
+      const count = await clientService.retryAllFailed();
+      if (count > 0) {
+        showToast(`Retrying ${count} failed item${count > 1 ? 's' : ''}...`, 'info');
+      } else {
+        const failedItems = downloads.filter((d) => d.status === 'error');
+        for (const dl of failedItems) {
+          handleRetryDownload(dl.id);
+        }
+      }
+    } catch (err: any) {
+      showToast(err.message || 'Failed to retry items', 'error');
+    }
+  };
+
   // Select Folder
   const handleChangeFolder = async () => {
     try {
@@ -492,6 +538,8 @@ export const App: React.FC = () => {
           <DownloadQueue
             downloads={downloads}
             onCancelDownload={handleCancelDownload}
+            onRetryDownload={handleRetryDownload}
+            onRetryAllFailed={handleRetryAllFailed}
             onClearCompleted={handleClearCompleted}
             onOpenFile={handleOpenFile}
             onOpenFolder={handleOpenDownloadsFolder}

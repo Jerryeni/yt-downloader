@@ -8,11 +8,15 @@ import {
   AlertCircle,
   Loader2,
   Trash2,
+  RotateCw,
+  Clock,
 } from 'lucide-react';
 
 interface DownloadQueueProps {
   downloads: DownloadProgress[];
   onCancelDownload: (id: string) => void;
+  onRetryDownload?: (id: string) => void;
+  onRetryAllFailed?: () => void;
   onClearCompleted: () => void;
   onOpenFile: (filePath: string) => void;
   onOpenFolder: (folderPath?: string) => void;
@@ -22,6 +26,8 @@ interface DownloadQueueProps {
 export const DownloadQueue: React.FC<DownloadQueueProps> = ({
   downloads,
   onCancelDownload,
+  onRetryDownload,
+  onRetryAllFailed,
   onClearCompleted,
   onOpenFile,
   onOpenFolder,
@@ -50,35 +56,60 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
   }
 
   const completedCount = downloads.filter((d) => d.status === 'completed' || d.status === 'error').length;
+  const failedCount = downloads.filter((d) => d.status === 'error').length;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
         <h3 style={{ fontSize: '17px', display: 'flex', alignItems: 'center', gap: '8px' }}>
           Active & Recent Downloads
           <span className="badge-count">{downloads.length}</span>
         </h3>
 
-        {completedCount > 0 && (
-          <button
-            onClick={onClearCompleted}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '6px 12px',
-              borderRadius: 'var(--radius-sm)',
-              fontSize: '12px',
-              background: 'var(--bg-subtle)',
-              color: 'var(--text-secondary)',
-              border: '1px solid var(--border-default)',
-              cursor: 'pointer',
-            }}
-          >
-            <Trash2 size={13} />
-            <span>Clear Completed</span>
-          </button>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {failedCount > 0 && onRetryAllFailed && (
+            <button
+              onClick={onRetryAllFailed}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 14px',
+                borderRadius: 'var(--radius-sm)',
+                fontSize: '12px',
+                fontWeight: 600,
+                background: 'var(--primary)',
+                color: '#fff',
+                border: 'none',
+                cursor: 'pointer',
+              }}
+            >
+              <RotateCw size={13} />
+              <span>Retry All Failed ({failedCount})</span>
+            </button>
+          )}
+
+          {completedCount > 0 && (
+            <button
+              onClick={onClearCompleted}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 12px',
+                borderRadius: 'var(--radius-sm)',
+                fontSize: '12px',
+                background: 'var(--bg-subtle)',
+                color: 'var(--text-secondary)',
+                border: '1px solid var(--border-default)',
+                cursor: 'pointer',
+              }}
+            >
+              <Trash2 size={13} />
+              <span>Clear Completed</span>
+            </button>
+          )}
+        </div>
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -87,6 +118,7 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
           const isProcessing = item.status === 'processing';
           const isError = item.status === 'error';
           const isCancelled = item.status === 'cancelled';
+          const isQueued = item.status === 'queued';
 
           return (
             <div key={item.id} className="download-item-card">
@@ -143,6 +175,13 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
                       color: 'var(--text-secondary)',
                     }}
                   >
+                    {isQueued && (
+                      <span style={{ color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                        <Clock size={13} />
+                        Waiting in queue... (auto-starts next)
+                      </span>
+                    )}
+
                     {item.status === 'downloading' && (
                       <>
                         <span style={{ color: 'var(--primary)', fontWeight: 600 }}>{item.speed}</span>
@@ -170,9 +209,11 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
                     )}
 
                     {isError && (
-                      <span style={{ color: 'var(--danger)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <AlertCircle size={14} />
-                        {item.error || 'Failed'}
+                      <span style={{ color: 'var(--danger)', display: 'flex', alignItems: 'center', gap: '4px', maxWidth: '540px' }}>
+                        <AlertCircle size={14} style={{ flexShrink: 0 }} />
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={item.error}>
+                          {item.error || 'Download failed'}
+                        </span>
                       </span>
                     )}
 
@@ -182,6 +223,29 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
 
                 {/* Actions */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  {isError && onRetryDownload && (
+                    <button
+                      className="icon-btn"
+                      title="Retry this download"
+                      style={{
+                        color: 'var(--primary)',
+                        backgroundColor: 'var(--primary-subtle)',
+                        borderRadius: 'var(--radius-sm)',
+                        padding: '5px 10px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                        fontSize: '12px',
+                        cursor: 'pointer',
+                        border: '1px solid var(--border-default)',
+                      }}
+                      onClick={() => onRetryDownload(item.id)}
+                    >
+                      <RotateCw size={13} />
+                      <span>Retry</span>
+                    </button>
+                  )}
+
                   {isFinished && item.filePath && isElectron && (
                     <>
                       <button
@@ -201,7 +265,7 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
                     </>
                   )}
 
-                  {(item.status === 'downloading' || isProcessing) && (
+                  {(item.status === 'downloading' || isProcessing || isQueued) && (
                     <button
                       className="icon-btn"
                       title="Cancel Download"

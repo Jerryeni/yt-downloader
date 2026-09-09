@@ -158,6 +158,8 @@ export interface ElectronAPI {
   extractPlaylist: (url: string) => Promise<PlaylistMetadata>;
   startDownload: (request: DownloadRequest) => Promise<{ success: boolean; id: string }>;
   cancelDownload: (id: string) => Promise<boolean>;
+  retryDownload: (id: string) => Promise<boolean>;
+  retryAllFailed: () => Promise<number>;
   selectFolder: () => Promise<string | null>;
   openFolder: (folderPath?: string) => Promise<boolean>;
   openFile: (filePath: string) => Promise<boolean>;
