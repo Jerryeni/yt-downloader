@@ -56,5 +56,5 @@ nsis:
 
 publish:
   provider: github
-  owner: novadownloader
-  repo: nova-downloader
+  owner: Jerryeni
+  repo: yt-downloader
