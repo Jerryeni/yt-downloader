@@ -1,9 +1,34 @@
 import fs from 'fs';
 import path from 'path';
+import { app } from 'electron';
 import archiver from 'archiver';
 import { CreateZipRequest, CreateZipResult } from '../shared/types';
 
 export class ZipManager {
+  /**
+   * Resolve the destination to a real, writable absolute directory.
+   *
+   * A relative path (e.g. "Downloads/NovaDownloader") would otherwise resolve
+   * against the process CWD, which on Windows is the install directory under
+   * C:\Program Files - not writable without elevation, so mkdir fails EPERM.
+   */
+  private resolveOutputFolder(requested?: string): string {
+    const fallback = path.join(app.getPath('downloads'), 'NovaDownloader');
+    const candidate = requested && requested.trim() ? requested.trim() : fallback;
+    const absolute = path.isAbsolute(candidate) ? candidate : fallback;
+
+    try {
+      fs.mkdirSync(absolute, { recursive: true });
+      fs.accessSync(absolute, fs.constants.W_OK);
+      return absolute;
+    } catch {
+      // Unwritable (permissions, read-only volume, removed drive): fall back to
+      // the user's own Downloads folder, which is always writable.
+      const safe = path.join(app.getPath('downloads'), 'NovaDownloader');
+      fs.mkdirSync(safe, { recursive: true });
+      return safe;
+    }
+  }
   /**
    * Creates a compressed .zip archive containing specified files with clean entry names.
    * Fully compatible with macOS, Windows, and Linux.
@@ -23,10 +48,7 @@ export class ZipManager {
           cleanName += '.zip';
         }
 
-        const outputFolder = req.outputFolder;
-        if (!fs.existsSync(outputFolder)) {
-          fs.mkdirSync(outputFolder, { recursive: true });
-        }
+        const outputFolder = this.resolveOutputFolder(req.outputFolder);
 
         const targetZipPath = path.join(outputFolder, cleanName);
         const outputStream = fs.createWriteStream(targetZipPath);

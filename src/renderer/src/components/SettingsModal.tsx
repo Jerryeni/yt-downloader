@@ -169,7 +169,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     whiteSpace: 'nowrap',
                   }}
                 >
-                  {settings.downloadFolder}
+                  {settings.downloadFolder || 'Loading...'}
                 </span>
                 <button
                   onClick={onChangeFolder}

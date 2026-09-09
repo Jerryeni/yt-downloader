@@ -153,7 +153,7 @@ export const BatchDownloader: React.FC<BatchDownloaderProps> = ({
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-secondary)' }}>
             <Folder size={14} />
             <span style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {downloadFolder}
+              {downloadFolder || 'Loading...'}
             </span>
             <button
               onClick={onChangeFolder}

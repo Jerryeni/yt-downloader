@@ -523,7 +523,14 @@ export class DownloadEngine extends EventEmitter {
     // need no merging rather than failing after a full download.
     const ffmpeg = await this.binaryManager.findFfmpeg();
 
-    const outputFolder = request.outputPath || this.store.getSettings().downloadFolder;
+    // Ignore relative paths from the renderer: they would resolve against the
+    // process CWD (C:\Program Files\... on Windows) and fail EPERM on mkdir.
+    const requestedFolder = request.outputPath || this.store.getSettings().downloadFolder;
+    const outputFolder =
+      requestedFolder && path.isAbsolute(requestedFolder)
+        ? requestedFolder
+        : this.store.getSettings().downloadFolder;
+
     if (!fs.existsSync(outputFolder)) {
       fs.mkdirSync(outputFolder, { recursive: true });
     }

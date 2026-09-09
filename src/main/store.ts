@@ -28,12 +28,22 @@ export class AppStore {
     this.settings = this.loadSettings();
     this.history = this.loadHistory();
 
-    // Ensure default download directory exists
-    if (!fs.existsSync(this.settings.downloadFolder)) {
+    // Ensure the download directory is absolute, present and writable. A saved
+    // relative path would resolve against the process CWD (the install folder
+    // under C:\Program Files on Windows) and fail with EPERM.
+    if (!path.isAbsolute(this.settings.downloadFolder || '')) {
+      this.settings.downloadFolder = defaultSettings.downloadFolder;
+    }
+
+    try {
+      fs.mkdirSync(this.settings.downloadFolder, { recursive: true });
+      fs.accessSync(this.settings.downloadFolder, fs.constants.W_OK);
+    } catch {
+      this.settings.downloadFolder = app.getPath('downloads');
       try {
         fs.mkdirSync(this.settings.downloadFolder, { recursive: true });
       } catch {
-        this.settings.downloadFolder = app.getPath('downloads');
+        // The OS Downloads folder always exists; nothing further to do.
       }
     }
   }

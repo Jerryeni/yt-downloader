@@ -65,7 +65,7 @@ export const App: React.FC = () => {
   >(new Map());
 
   const [settings, setSettings] = useState<AppSettings>({
-    downloadFolder: isElectron ? 'Downloads/NovaDownloader' : 'Browser Downloads',
+    downloadFolder: isElectron ? '' : 'Browser Downloads',
     maxConcurrentDownloads: 3,
     theme: 'dark',
     autoDetectClipboard: true,
@@ -74,6 +74,13 @@ export const App: React.FC = () => {
     embedThumbnailDefault: true,
     autoCheckBinaryUpdates: true,
   });
+
+  // Mirrors `settings` so callbacks registered once (the [] effect below) read
+  // the current folder instead of the value captured at mount.
+  const settingsRef = useRef(settings);
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
 
   const showToast = (message: string, type: 'info' | 'success' | 'error' = 'info') => {
     const id = `${Date.now()}-${Math.random()}`;
@@ -148,7 +155,7 @@ export const App: React.FC = () => {
                 isOpen: true,
                 batchTitle: batch.batchTitle,
                 files: [...batch.completedFiles],
-                outputFolder: settings.downloadFolder,
+                outputFolder: settingsRef.current.downloadFolder,
               });
             }
             activeBatchesRef.current.delete(prog.batchId);

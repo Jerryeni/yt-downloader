@@ -230,7 +230,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
               <Folder size={14} />
               <span>Save to:</span>
               <span style={{ maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500 }}>
-                {downloadFolder}
+                {downloadFolder || 'Loading...'}
               </span>
               <button
                 onClick={onChangeFolder}
