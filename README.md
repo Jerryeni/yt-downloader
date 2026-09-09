@@ -15,19 +15,19 @@
 
 ---
 
-## 🚀 Download Pre-Built Binaries (v1.0.2)
+## 🚀 Download Pre-Built Binaries (v1.0.3)
 
 Get the latest release ready-to-use for your computer:
 
 | Operating System | Architecture | Package Format | Direct Download Link |
 | :--- | :--- | :--- | :--- |
-| **Windows** (10 / 11) | **64-bit** (x64) | **Setup Installer (`.exe`)** | [⬇️ **Download Windows Setup Installer (.exe)**](https://github.com/Jerryeni/yt-downloader/releases/download/v1.0.2/NovaDownloader-Setup-1.0.2-x64.exe) |
-| **Windows** (10 / 11) | **64-bit** (x64) | **Portable Standalone (`.exe`)** | [⬇️ **Download Windows Portable (.exe)**](https://github.com/Jerryeni/yt-downloader/releases/download/v1.0.2/NovaDownloader-Portable-1.0.2-x64.exe) |
-| **macOS** (11.0+) | **Apple Silicon** (M1 / M2 / M3 / M4) | **Apple Disk Image (`.dmg`)** | [⬇️ **Download macOS Apple Silicon (.dmg)**](https://github.com/Jerryeni/yt-downloader/releases/download/v1.0.2/NovaDownloader-1.0.2-mac-arm64.dmg) |
-| **macOS** (11.0+) | **Apple Silicon** (M1 / M2 / M3 / M4) | **Portable Archive (`.zip`)** | [⬇️ **Download macOS Apple Silicon (.zip)**](https://github.com/Jerryeni/yt-downloader/releases/download/v1.0.2/NovaDownloader-1.0.2-mac-arm64.zip) |
-| **macOS** (11.0+) | **Intel** (x64) | **Apple Disk Image (`.dmg`)** | [⬇️ **Download macOS Intel (.dmg)**](https://github.com/Jerryeni/yt-downloader/releases/download/v1.0.2/NovaDownloader-1.0.2-mac-x64.dmg) |
-| **macOS** (11.0+) | **Intel** (x64) | **Portable Archive (`.zip`)** | [⬇️ **Download macOS Intel (.zip)**](https://github.com/Jerryeni/yt-downloader/releases/download/v1.0.2/NovaDownloader-1.0.2-mac-x64.zip) |
-| **Web & Mobile** | **iOS Safari / Android / Browser** | **PWA Web Bundle (`.zip`)** | [⬇️ **Download Web Server & PWA Package (.zip)**](https://github.com/Jerryeni/yt-downloader/releases/download/v1.0.2/NovaDownloader-Web-PWA.zip) |
+| **Windows** (10 / 11) | **64-bit** (x64) | **Setup Installer (`.exe`)** | [⬇️ **Download Windows Setup Installer (.exe)**](https://github.com/Jerryeni/yt-downloader/releases/download/v1.0.3/NovaDownloader-Setup-1.0.3-x64.exe) |
+| **Windows** (10 / 11) | **64-bit** (x64) | **Portable Standalone (`.exe`)** | [⬇️ **Download Windows Portable (.exe)**](https://github.com/Jerryeni/yt-downloader/releases/download/v1.0.3/NovaDownloader-Portable-1.0.3-x64.exe) |
+| **macOS** (11.0+) | **Apple Silicon** (M1 / M2 / M3 / M4) | **Apple Disk Image (`.dmg`)** | [⬇️ **Download macOS Apple Silicon (.dmg)**](https://github.com/Jerryeni/yt-downloader/releases/download/v1.0.3/NovaDownloader-1.0.3-mac-arm64.dmg) |
+| **macOS** (11.0+) | **Apple Silicon** (M1 / M2 / M3 / M4) | **Portable Archive (`.zip`)** | [⬇️ **Download macOS Apple Silicon (.zip)**](https://github.com/Jerryeni/yt-downloader/releases/download/v1.0.3/NovaDownloader-1.0.3-mac-arm64.zip) |
+| **macOS** (11.0+) | **Intel** (x64) | **Apple Disk Image (`.dmg`)** | [⬇️ **Download macOS Intel (.dmg)**](https://github.com/Jerryeni/yt-downloader/releases/download/v1.0.3/NovaDownloader-1.0.3-mac-x64.dmg) |
+| **macOS** (11.0+) | **Intel** (x64) | **Portable Archive (`.zip`)** | [⬇️ **Download macOS Intel (.zip)**](https://github.com/Jerryeni/yt-downloader/releases/download/v1.0.3/NovaDownloader-1.0.3-mac-x64.zip) |
+| **Web & Mobile** | **iOS Safari / Android / Browser** | **PWA Web Bundle (`.zip`)** | [⬇️ **Download Web Server & PWA Package (.zip)**](https://github.com/Jerryeni/yt-downloader/releases/download/v1.0.3/NovaDownloader-Web-PWA.zip) |
 
 👉 **All Assets & Releases**: [View All Releases on GitHub](https://github.com/Jerryeni/yt-downloader/releases)
 
@@ -114,7 +114,7 @@ npm run dev
 NovaDownloader can be accessed from any mobile browser or installed as a Progressive Web App (PWA) on iPhone, iPad, and Android devices:
 
 ### Quickstart with Downloaded Web Bundle:
-1. Download [**NovaDownloader-Web-PWA.zip**](https://github.com/Jerryeni/yt-downloader/releases/download/v1.0.2/NovaDownloader-Web-PWA.zip) and unzip it.
+1. Download [**NovaDownloader-Web-PWA.zip**](https://github.com/Jerryeni/yt-downloader/releases/download/v1.0.3/NovaDownloader-Web-PWA.zip) and unzip it.
 2. Run:
    ```bash
    npm install --omit=dev
