@@ -21,10 +21,12 @@
     "dist:win": "npm run build && electron-builder --win"
   },
   "dependencies": {
+    "archiver": "^6.0.2",
     "cors": "^2.8.6",
     "express": "^5.2.1"
   },
   "devDependencies": {
+    "@types/archiver": "^6.0.4",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/node": "^20.17.10",

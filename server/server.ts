@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
+import archiver from 'archiver';
 import { spawn } from 'child_process';
 import { exec } from 'child_process';
 import { promisify } from 'util';
@@ -50,19 +51,50 @@ function formatDuration(seconds: number): string {
   return `${pad(mins)}:${pad(secs)}`;
 }
 
-// In-App Search Endpoint
+// In-App Search Endpoint with Filters and Pagination
 app.get('/api/search', async (req, res) => {
-  const query = req.query.q as string;
+  const query = (req.query.q as string || '').trim();
   if (!query) return res.status(400).json({ error: 'Search query is required' });
+
+  const page = Number(req.query.page) || 1;
+  const pageSize = Number(req.query.pageSize) || 16;
+  const startIdx = (page - 1) * pageSize + 1;
+  const endIdx = page * pageSize;
+  const filterType = req.query.filterType as string;
+  const duration = req.query.duration as string;
+  const sortBy = req.query.sortBy as string;
 
   try {
     const ytDlp = await getYtDlp();
+    let searchTarget = '';
+    if (filterType === 'playlist') {
+      searchTarget = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}&sp=EgIQAw%253D%253D`;
+    } else {
+      let spParam = '';
+      if (duration === 'short') spParam = 'EgQQARgB';
+      else if (duration === 'medium') spParam = 'EgQQARgD';
+      else if (duration === 'long') spParam = 'EgQQARgC';
+      else if (sortBy === 'date') spParam = 'CAI%253D';
+      else if (sortBy === 'views') spParam = 'CAM%253D';
+      else if (filterType === 'video') spParam = 'EgIQAQ%253D%253D';
+
+      if (spParam) {
+        searchTarget = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}&sp=${spParam}`;
+      } else {
+        searchTarget = `ytsearch${endIdx + 8}:${query}`;
+      }
+    }
+
     const args = [
-      `ytsearch8:${query}`,
+      searchTarget,
       '--dump-single-json',
       '--flat-playlist',
       '--no-warnings',
       '--skip-download',
+      '--playlist-start',
+      String(startIdx),
+      '--playlist-end',
+      String(endIdx),
       '--extractor-args',
       'youtube:player_client=android,web',
     ];
@@ -81,16 +113,32 @@ app.get('/api/search', async (req, res) => {
 
       try {
         const raw = JSON.parse(stdout);
-        const entries = (raw.entries || []).map((e: any) => ({
-          id: e.id,
-          url: e.url || `https://www.youtube.com/watch?v=${e.id}`,
-          title: e.title || 'Untitled',
-          uploader: e.uploader || e.channel || 'YouTube Creator',
-          durationFormatted: formatDuration(e.duration || 0),
-          thumbnail: e.thumbnails?.[0]?.url || `https://i.ytimg.com/vi/${e.id}/mqdefault.jpg`,
-          viewCount: e.view_count,
-        }));
-        res.json({ results: entries });
+        const entries: any[] = raw.entries || [];
+        const results = entries.map((e: any) => {
+          const isPlaylist =
+            filterType === 'playlist' ||
+            e._type === 'playlist' ||
+            (e.url && e.url.includes('list=')) ||
+            (e.id && e.id.startsWith('PL'));
+
+          return {
+            id: e.id,
+            url: e.url || (isPlaylist ? `https://www.youtube.com/playlist?list=${e.id}` : `https://www.youtube.com/watch?v=${e.id}`),
+            title: e.title || 'Untitled',
+            uploader: e.uploader || e.channel || 'YouTube Creator',
+            durationFormatted: isPlaylist ? 'Playlist' : formatDuration(e.duration || 0),
+            thumbnail: e.thumbnails?.[0]?.url || (e.id ? `https://i.ytimg.com/vi/${e.id}/mqdefault.jpg` : ''),
+            viewCount: e.view_count,
+            isPlaylist,
+            itemCount: e.playlist_count || undefined,
+          };
+        });
+
+        res.json({
+          results,
+          hasMore: entries.length >= pageSize,
+          page,
+        });
       } catch (err: any) {
         res.status(500).json({ error: 'Failed to parse search results' });
       }
@@ -286,6 +334,84 @@ app.get('/api/download', async (req, res) => {
     if (!res.headersSent) {
       res.status(500).send(`Failed to stream download: ${err.message}`);
     }
+  }
+});
+
+// Web / Mobile Batch ZIP Creation & Streaming Endpoint
+app.post('/api/create-zip', async (req, res) => {
+  const { archiveName, items } = req.body as {
+    archiveName?: string;
+    items?: Array<{ url: string; title: string; formatType?: 'video' | 'audio'; quality?: string; index?: number }>;
+  };
+
+  if (!items || items.length === 0) {
+    return res.status(400).json({ error: 'No items provided for zip archive' });
+  }
+
+  const cleanArchiveName = (archiveName || 'batch_downloads')
+    .replace(/[<>:"/\\|?*]/g, '_')
+    .trim();
+  const zipFilename = cleanArchiveName.endsWith('.zip') ? cleanArchiveName : `${cleanArchiveName}.zip`;
+
+  res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(zipFilename)}"`);
+  res.setHeader('Content-Type', 'application/zip');
+
+  const archive = archiver('zip', { zlib: { level: 5 } });
+  archive.pipe(res);
+
+  archive.on('error', (err: any) => {
+    console.error('Archiver streaming error:', err);
+    if (!res.headersSent) res.status(500).send(err.message);
+  });
+
+  try {
+    const ytDlp = await getYtDlp();
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      const isAudio = item.formatType === 'audio';
+      const ext = isAudio ? 'mp3' : 'mp4';
+      const indexStr = item.index !== undefined ? `${String(item.index).padStart(2, '0')}. ` : `${String(i + 1).padStart(2, '0')}. `;
+      const safeTitle = (item.title || `Track_${i + 1}`).replace(/[<>:"/\\|?*]/g, '_').trim();
+      const entryName = `${indexStr}${safeTitle}.${ext}`;
+
+      const args = [
+        '-N', '8',
+        '--concurrent-fragments', '8',
+        '--buffer-size', '64K',
+        '--no-playlist',
+        '--extractor-args', 'youtube:player_client=android,web',
+        '--js-runtimes', 'node',
+        '-o', '-',
+      ];
+
+      if (isAudio) {
+        args.push('-x', '--audio-format', 'mp3', '--audio-quality', '0');
+      } else {
+        const quality = item.quality || '1080p';
+        if (quality && quality.includes('p')) {
+          const height = parseInt(quality.replace(/\D/g, ''), 10);
+          args.push('-f', `bestvideo[height<=${height}]+bestaudio/best[height<=${height}]/best`);
+        } else {
+          args.push('-f', 'bestvideo+bestaudio/best');
+        }
+      }
+
+      args.push(item.url);
+
+      const itemProc = spawn(ytDlp, args);
+      archive.append(itemProc.stdout, { name: entryName });
+
+      await new Promise<void>((next) => {
+        itemProc.stdout.on('end', () => next());
+        itemProc.on('error', () => next());
+      });
+    }
+
+    archive.finalize();
+  } catch (err: any) {
+    console.error('Failed to create batch zip on web server:', err);
+    archive.abort();
   }
 });
 

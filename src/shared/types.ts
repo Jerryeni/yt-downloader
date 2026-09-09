@@ -39,6 +39,23 @@ export interface SearchResultItem {
   durationFormatted: string;
   thumbnail: string;
   viewCount?: number;
+  isPlaylist?: boolean;
+  itemCount?: number;
+}
+
+export interface SearchFilterOptions {
+  query: string;
+  filterType?: 'all' | 'video' | 'playlist';
+  duration?: 'any' | 'short' | 'medium' | 'long';
+  sortBy?: 'relevance' | 'date' | 'views';
+  page?: number;
+  pageSize?: number;
+}
+
+export interface SearchResponse {
+  results: SearchResultItem[];
+  hasMore: boolean;
+  page: number;
 }
 
 export interface PlaylistItem {
@@ -72,6 +89,9 @@ export interface DownloadRequest {
   embedSubtitles?: boolean;
   subtitleLang?: string;
   embedThumbnail?: boolean;
+  batchId?: string;
+  batchTitle?: string;
+  itemIndex?: number;
 }
 
 export type DownloadStatus = 'queued' | 'downloading' | 'processing' | 'completed' | 'error' | 'cancelled';
@@ -91,6 +111,9 @@ export interface DownloadProgress {
   error?: string;
   startedAt: number;
   completedAt?: number;
+  batchId?: string;
+  batchTitle?: string;
+  itemIndex?: number;
 }
 
 export interface DownloadHistoryItem {
@@ -131,7 +154,7 @@ export interface BinaryStatus {
 
 export interface ElectronAPI {
   analyzeUrl: (url: string) => Promise<VideoMetadata>;
-  searchYouTube: (query: string) => Promise<SearchResultItem[]>;
+  searchYouTube: (options: SearchFilterOptions) => Promise<SearchResponse>;
   extractPlaylist: (url: string) => Promise<PlaylistMetadata>;
   startDownload: (request: DownloadRequest) => Promise<{ success: boolean; id: string }>;
   cancelDownload: (id: string) => Promise<boolean>;
@@ -147,4 +170,23 @@ export interface ElectronAPI {
   updateYtDlp: () => Promise<{ success: boolean; message: string; version?: string }>;
   onDownloadProgress: (callback: (progress: DownloadProgress) => void) => () => void;
   readClipboard: () => Promise<string>;
+  createZip: (request: CreateZipRequest) => Promise<CreateZipResult>;
+}
+
+export interface ZipFileItem {
+  filePath: string;
+  entryName: string;
+}
+
+export interface CreateZipRequest {
+  archiveName: string;
+  outputFolder: string;
+  files: ZipFileItem[];
+  deleteOriginals?: boolean;
+}
+
+export interface CreateZipResult {
+  success: boolean;
+  zipPath: string;
+  error?: string;
 }

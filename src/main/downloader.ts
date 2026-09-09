@@ -10,6 +10,8 @@ import {
   VideoFormat,
   DownloadHistoryItem,
   SearchResultItem,
+  SearchFilterOptions,
+  SearchResponse,
   PlaylistMetadata,
   PlaylistItem,
 } from '../shared/types';
@@ -47,18 +49,46 @@ export class DownloadEngine extends EventEmitter {
   }
 
   /**
-   * Fast In-App YouTube Search
+   * Smart YouTube Search with Filters & Pagination
    */
-  public async searchVideos(query: string, limit = 8): Promise<SearchResultItem[]> {
+  public async searchVideos(options: SearchFilterOptions): Promise<SearchResponse> {
     const ytDlp = await this.binaryManager.getYtDlpPath();
+    const page = options.page || 1;
+    const pageSize = options.pageSize || 16;
+    const startIdx = (page - 1) * pageSize + 1;
+    const endIdx = page * pageSize;
+    const query = options.query.trim();
+
+    let searchTarget = '';
+    if (options.filterType === 'playlist') {
+      searchTarget = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}&sp=EgIQAw%253D%253D`;
+    } else {
+      let spParam = '';
+      if (options.duration === 'short') spParam = 'EgQQARgB';
+      else if (options.duration === 'medium') spParam = 'EgQQARgD';
+      else if (options.duration === 'long') spParam = 'EgQQARgC';
+      else if (options.sortBy === 'date') spParam = 'CAI%253D';
+      else if (options.sortBy === 'views') spParam = 'CAM%253D';
+      else if (options.filterType === 'video') spParam = 'EgIQAQ%253D%253D';
+
+      if (spParam) {
+        searchTarget = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}&sp=${spParam}`;
+      } else {
+        searchTarget = `ytsearch${endIdx + 8}:${query}`;
+      }
+    }
 
     return new Promise((resolve, reject) => {
       const args = [
-        `ytsearch${limit}:${query}`,
+        searchTarget,
         '--dump-single-json',
         '--flat-playlist',
         '--no-warnings',
         '--skip-download',
+        '--playlist-start',
+        String(startIdx),
+        '--playlist-end',
+        String(endIdx),
         '--extractor-args',
         'youtube:player_client=android,web',
       ];
@@ -78,16 +108,31 @@ export class DownloadEngine extends EventEmitter {
         try {
           const raw = JSON.parse(stdout);
           const entries: any[] = raw.entries || [];
-          const results: SearchResultItem[] = entries.map((e) => ({
-            id: e.id,
-            url: e.url || `https://www.youtube.com/watch?v=${e.id}`,
-            title: e.title || 'Untitled',
-            uploader: e.uploader || e.channel || 'YouTube Creator',
-            durationFormatted: formatDuration(e.duration || 0),
-            thumbnail: e.thumbnails?.[0]?.url || `https://i.ytimg.com/vi/${e.id}/mqdefault.jpg`,
-            viewCount: e.view_count,
-          }));
-          resolve(results);
+          const results: SearchResultItem[] = entries.map((e) => {
+            const isPlaylist =
+              options.filterType === 'playlist' ||
+              e._type === 'playlist' ||
+              (e.url && e.url.includes('list=')) ||
+              (e.id && e.id.startsWith('PL'));
+
+            return {
+              id: e.id,
+              url: e.url || (isPlaylist ? `https://www.youtube.com/playlist?list=${e.id}` : `https://www.youtube.com/watch?v=${e.id}`),
+              title: e.title || 'Untitled',
+              uploader: e.uploader || e.channel || 'YouTube Creator',
+              durationFormatted: isPlaylist ? 'Playlist' : formatDuration(e.duration || 0),
+              thumbnail: e.thumbnails?.[0]?.url || (e.id ? `https://i.ytimg.com/vi/${e.id}/mqdefault.jpg` : ''),
+              viewCount: e.view_count,
+              isPlaylist,
+              itemCount: e.playlist_count || (isPlaylist ? undefined : undefined),
+            };
+          });
+
+          resolve({
+            results,
+            hasMore: entries.length >= pageSize,
+            page,
+          });
         } catch (err: any) {
           reject(new Error(`Failed to parse search results: ${err.message}`));
         }
@@ -296,7 +341,6 @@ export class DownloadEngine extends EventEmitter {
     const args: string[] = [
       '--newline',
       '--no-playlist',
-      // High speed multi-threading: 8 parallel fragment downloads!
       '-N',
       '8',
       '--concurrent-fragments',
@@ -323,7 +367,6 @@ export class DownloadEngine extends EventEmitter {
       args.push('--ffmpeg-location', ffmpeg);
     }
 
-    // Format selection
     if (request.formatType === 'audio') {
       const audioFormat = request.audioFormat || 'mp3';
       args.push('-x', '--audio-format', audioFormat, '--audio-quality', '0');
@@ -332,7 +375,6 @@ export class DownloadEngine extends EventEmitter {
       }
       args.push('--add-metadata');
     } else {
-      // Video format selection with audio remux
       if (request.quality === 'best') {
         args.push('-f', 'bestvideo+bestaudio/best', '--merge-output-format', 'mp4');
       } else if (request.quality.includes('p')) {
@@ -369,6 +411,9 @@ export class DownloadEngine extends EventEmitter {
       totalBytes: 'Calculating...',
       status: 'downloading',
       startedAt: Date.now(),
+      batchId: request.batchId,
+      batchTitle: request.batchTitle,
+      itemIndex: request.itemIndex,
     };
 
     this.emit('progress', progressObj);
@@ -405,12 +450,21 @@ export class DownloadEngine extends EventEmitter {
         } else if (line.includes('[Merger]') || line.includes('[ExtractAudio]') || line.includes('[Fixup')) {
           progressObj.status = 'processing';
           this.emit('progress', { ...progressObj });
-        } else if (line.includes('[download] Destination:')) {
+        }
+        
+        if (line.includes('[download] Destination:')) {
           downloadedFilePath = line.replace('[download] Destination:', '').trim();
+        } else if (line.includes('[ExtractAudio] Destination:')) {
+          downloadedFilePath = line.replace('[ExtractAudio] Destination:', '').trim();
         } else if (line.includes('[Merger] Merging formats into')) {
           const match = line.match(/Merging formats into "([^"]+)"/);
           if (match) {
             downloadedFilePath = match[1];
+          }
+        } else if (line.includes('has already been downloaded')) {
+          const match = line.match(/\[download\]\s+(.*?)\s+has already been downloaded/);
+          if (match && match[1]) {
+            downloadedFilePath = match[1].trim();
           }
         }
       }
@@ -425,6 +479,28 @@ export class DownloadEngine extends EventEmitter {
       this.activeProcesses.delete(request.id);
 
       if (code === 0) {
+        // Fallback: If path wasn't captured from stdout lines, look for file in outputFolder
+        if (!downloadedFilePath || !fs.existsSync(downloadedFilePath)) {
+          try {
+            if (fs.existsSync(outputFolder)) {
+              const files = fs.readdirSync(outputFolder);
+              // Find most recent file matching request title or URL id
+              const matching = files
+                .filter((f) => f.includes(request.title.slice(0, 20)) || f.endsWith('.mp4') || f.endsWith('.mp3'))
+                .map((f) => ({
+                  name: f,
+                  fullPath: path.join(outputFolder, f),
+                  mtime: fs.statSync(path.join(outputFolder, f)).mtimeMs,
+                }))
+                .sort((a, b) => b.mtime - a.mtime);
+
+              if (matching.length > 0) {
+                downloadedFilePath = matching[0].fullPath;
+              }
+            }
+          } catch {}
+        }
+
         progressObj.percent = 100;
         progressObj.status = 'completed';
         progressObj.filePath = downloadedFilePath;

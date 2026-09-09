@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   VideoMetadata,
   DownloadProgress,
@@ -8,6 +8,7 @@ import {
   DownloadRequest,
   SearchResultItem,
   PlaylistMetadata,
+  ZipFileItem,
 } from './types';
 import { clientService, isElectron } from './services/api';
 import { Navbar } from './components/Navbar';
@@ -19,6 +20,8 @@ import { DownloadQueue } from './components/DownloadQueue';
 import { BatchDownloader } from './components/BatchDownloader';
 import { HistoryList } from './components/HistoryList';
 import { SettingsModal } from './components/SettingsModal';
+import { BatchZipModal } from './components/BatchZipModal';
+import { formatProperFileName } from './utils/sanitize';
 import { CheckCircle2, AlertCircle, Info, Sparkles, Loader2 } from 'lucide-react';
 
 interface Toast {
@@ -40,6 +43,25 @@ export const App: React.FC = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [isUpdatingBinary, setIsUpdatingBinary] = useState<boolean>(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [batchZipPrompt, setBatchZipPrompt] = useState<{
+    isOpen: boolean;
+    batchTitle: string;
+    files: ZipFileItem[];
+    outputFolder: string;
+  } | null>(null);
+
+  const activeBatchesRef = useRef<
+    Map<
+      string,
+      {
+        batchId: string;
+        batchTitle: string;
+        totalCount: number;
+        completedFiles: ZipFileItem[];
+        processedIds: Set<string>;
+      }
+    >
+  >(new Map());
 
   const [settings, setSettings] = useState<AppSettings>({
     downloadFolder: isElectron ? 'Downloads/NovaDownloader' : 'Browser Downloads',
@@ -96,6 +118,41 @@ export const App: React.FC = () => {
         clientService.getHistory().then(setHistory);
       } else if (prog.status === 'error') {
         showToast(`Failed: ${prog.error || 'Download failed'}`, 'error');
+      }
+
+      // Check if item belongs to an active batch
+      if (prog.batchId && activeBatchesRef.current.has(prog.batchId)) {
+        const batch = activeBatchesRef.current.get(prog.batchId)!;
+        if (!batch.processedIds.has(prog.id)) {
+          if (prog.status === 'completed') {
+            batch.processedIds.add(prog.id);
+            let ext = 'mp4';
+            if (prog.filePath && prog.filePath.includes('.')) {
+              ext = prog.filePath.split('.').pop() || 'mp4';
+            }
+            const properName = formatProperFileName(prog.itemIndex, prog.title, ext);
+            if (prog.filePath) {
+              batch.completedFiles.push({
+                filePath: prog.filePath,
+                entryName: properName,
+              });
+            }
+          } else if (prog.status === 'error' || prog.status === 'cancelled') {
+            batch.processedIds.add(prog.id);
+          }
+
+          if (batch.processedIds.size >= batch.totalCount) {
+            if (batch.completedFiles.length > 0) {
+              setBatchZipPrompt({
+                isOpen: true,
+                batchTitle: batch.batchTitle,
+                files: [...batch.completedFiles],
+                outputFolder: settings.downloadFolder,
+              });
+            }
+            activeBatchesRef.current.delete(prog.batchId);
+          }
+        }
       }
     });
 
@@ -171,6 +228,24 @@ export const App: React.FC = () => {
       }
     } catch (err: any) {
       showToast(err.message || 'Failed to start download', 'error');
+    }
+  };
+
+  // Enqueue Batch
+  const handleEnqueueBatch = (requests: DownloadRequest[]) => {
+    if (requests.length === 0) return;
+    const first = requests[0];
+    if (first.batchId) {
+      activeBatchesRef.current.set(first.batchId, {
+        batchId: first.batchId,
+        batchTitle: first.batchTitle || 'Batch Download',
+        totalCount: requests.length,
+        completedFiles: [],
+        processedIds: new Set(),
+      });
+    }
+    for (const req of requests) {
+      handleStartDownload(req);
     }
   };
 
@@ -352,9 +427,7 @@ export const App: React.FC = () => {
                 playlist={playlistMetadata}
                 downloadFolder={settings.downloadFolder}
                 onEnqueueBatch={(requests) => {
-                  for (const req of requests) {
-                    handleStartDownload(req);
-                  }
+                  handleEnqueueBatch(requests);
                   setActiveTab('queue');
                 }}
                 onClose={() => setPlaylistMetadata(null)}
@@ -399,8 +472,9 @@ export const App: React.FC = () => {
         {activeTab === 'search' && (
           <SearchResults
             onSelectVideo={handleSelectSearchedVideo}
+            onSelectPlaylist={handleSelectSearchedVideo}
             onQuickDownload={handleQuickDownload}
-            onPerformSearch={(q) => clientService.searchYouTube(q)}
+            onPerformSearch={(opts) => clientService.searchYouTube(opts)}
           />
         )}
 
@@ -408,11 +482,7 @@ export const App: React.FC = () => {
           <BatchDownloader
             downloadFolder={settings.downloadFolder}
             onChangeFolder={handleChangeFolder}
-            onEnqueueBatch={(requests) => {
-              for (const req of requests) {
-                handleStartDownload(req);
-              }
-            }}
+            onEnqueueBatch={handleEnqueueBatch}
             onSwitchToQueue={() => setActiveTab('queue')}
             isElectron={isElectron}
           />
@@ -440,6 +510,20 @@ export const App: React.FC = () => {
           />
         )}
       </main>
+
+      {/* Batch Completion ZIP Modal */}
+      {batchZipPrompt && (
+        <BatchZipModal
+          isOpen={batchZipPrompt.isOpen}
+          batchTitle={batchZipPrompt.batchTitle}
+          files={batchZipPrompt.files}
+          outputFolder={batchZipPrompt.outputFolder}
+          onClose={() => setBatchZipPrompt(null)}
+          onCreateZip={(req) => clientService.createZip(req)}
+          onOpenFolder={handleOpenDownloadsFolder}
+          isElectron={isElectron}
+        />
+      )}
 
       {/* Settings Modal */}
       <SettingsModal

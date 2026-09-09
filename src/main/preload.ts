@@ -4,11 +4,13 @@ import {
   AppSettings,
   DownloadProgress,
   ElectronAPI,
+  SearchFilterOptions,
+  CreateZipRequest,
 } from '../shared/types';
 
 const api: ElectronAPI = {
   analyzeUrl: (url: string) => ipcRenderer.invoke('analyze-url', url),
-  searchYouTube: (query: string) => ipcRenderer.invoke('search-youtube', query),
+  searchYouTube: (options: SearchFilterOptions) => ipcRenderer.invoke('search-youtube', options),
   extractPlaylist: (url: string) => ipcRenderer.invoke('extract-playlist', url),
   startDownload: (request: DownloadRequest) => ipcRenderer.invoke('start-download', request),
   cancelDownload: (id: string) => ipcRenderer.invoke('cancel-download', id),
@@ -23,6 +25,7 @@ const api: ElectronAPI = {
   getBinaryStatus: () => ipcRenderer.invoke('get-binary-status'),
   updateYtDlp: () => ipcRenderer.invoke('update-ytdlp'),
   readClipboard: () => ipcRenderer.invoke('read-clipboard'),
+  createZip: (request: CreateZipRequest) => ipcRenderer.invoke('create-zip', request),
   onDownloadProgress: (callback: (progress: DownloadProgress) => void) => {
     const handler = (_event: any, progress: DownloadProgress) => callback(progress);
     ipcRenderer.on('download-progress', handler);

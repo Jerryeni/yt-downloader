@@ -1,12 +1,15 @@
 import {
   VideoMetadata,
-  SearchResultItem,
   PlaylistMetadata,
   DownloadRequest,
   AppSettings,
   DownloadHistoryItem,
   BinaryStatus,
   DownloadProgress,
+  SearchFilterOptions,
+  SearchResponse,
+  CreateZipRequest,
+  CreateZipResult,
 } from '../types';
 
 export const isElectron = typeof window !== 'undefined' && !!window.electronAPI;
@@ -14,14 +17,59 @@ export const isElectron = typeof window !== 'undefined' && !!window.electronAPI;
 export const clientService = {
   isElectron,
 
-  async searchYouTube(query: string): Promise<SearchResultItem[]> {
+  async createZip(req: CreateZipRequest): Promise<CreateZipResult> {
     if (isElectron) {
-      return await window.electronAPI.searchYouTube(query);
+      return await window.electronAPI.createZip(req);
     }
-    const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+
+    // Web / PWA mode: Stream ZIP from server
+    try {
+      const res = await fetch('/api/create-zip', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(req),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Zip creation failed' }));
+        return { success: false, zipPath: '', error: err.error || 'Failed to create zip' };
+      }
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = req.archiveName.endsWith('.zip') ? req.archiveName : `${req.archiveName}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      return { success: true, zipPath: a.download };
+    } catch (err: any) {
+      return { success: false, zipPath: '', error: err.message || 'Failed to create zip' };
+    }
+  },
+
+  async searchYouTube(options: SearchFilterOptions): Promise<SearchResponse> {
+    if (isElectron) {
+      return await window.electronAPI.searchYouTube(options);
+    }
+    const params = new URLSearchParams({
+      q: options.query,
+      filterType: options.filterType || 'all',
+      duration: options.duration || 'any',
+      sortBy: options.sortBy || 'relevance',
+      page: String(options.page || 1),
+      pageSize: String(options.pageSize || 16),
+    });
+    const res = await fetch(`/api/search?${params.toString()}`);
     if (!res.ok) throw new Error('Failed to search YouTube');
     const data = await res.json();
-    return data.results || [];
+    return {
+      results: data.results || [],
+      hasMore: !!data.hasMore,
+      page: data.page || 1,
+    };
   },
 
   async analyzeUrl(url: string): Promise<{ isPlaylist: boolean; metadata?: VideoMetadata; playlist?: PlaylistMetadata }> {

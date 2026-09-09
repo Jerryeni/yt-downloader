@@ -40,8 +40,11 @@ export const PlaylistView: React.FC<PlaylistViewProps> = ({
     const selectedItems = playlist.items.filter((i) => selectedIds.has(i.id));
     if (selectedItems.length === 0) return;
 
+    const batchId = `playlist-${playlist.id}-${Date.now()}`;
+    const batchTitle = playlist.title || 'Playlist';
+
     const requests: DownloadRequest[] = selectedItems.map((item, idx) => ({
-      id: `playlist-${playlist.id}-${item.id}-${idx}`,
+      id: `${batchId}-${item.id}-${idx}`,
       url: item.url,
       title: item.title,
       thumbnail: item.thumbnail,
@@ -51,6 +54,9 @@ export const PlaylistView: React.FC<PlaylistViewProps> = ({
       audioFormat: 'mp3',
       outputPath: downloadFolder,
       embedThumbnail: true,
+      batchId,
+      batchTitle,
+      itemIndex: item.index || idx + 1,
     }));
 
     onEnqueueBatch(requests);

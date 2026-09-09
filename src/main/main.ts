@@ -3,12 +3,14 @@ import path from 'path';
 import { BinaryManager } from './binaryManager';
 import { DownloadEngine } from './downloader';
 import { AppStore } from './store';
-import { DownloadRequest, AppSettings } from '../shared/types';
+import { ZipManager } from './zipManager';
+import { DownloadRequest, AppSettings, SearchFilterOptions, CreateZipRequest } from '../shared/types';
 
 let mainWindow: BrowserWindow | null = null;
 const binaryManager = new BinaryManager();
 const store = new AppStore();
 const downloadEngine = new DownloadEngine(binaryManager, store);
+const zipManager = new ZipManager();
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 
@@ -98,9 +100,9 @@ ipcMain.handle('analyze-url', async (_event, url: string) => {
   }
 });
 
-ipcMain.handle('search-youtube', async (_event, query: string) => {
+ipcMain.handle('search-youtube', async (_event, options: SearchFilterOptions) => {
   try {
-    return await downloadEngine.searchVideos(query);
+    return await downloadEngine.searchVideos(options);
   } catch (error: any) {
     throw new Error(error.message || 'Failed to search YouTube');
   }
@@ -188,4 +190,8 @@ ipcMain.handle('update-ytdlp', async () => {
 
 ipcMain.handle('read-clipboard', async () => {
   return clipboard.readText();
+});
+
+ipcMain.handle('create-zip', async (_event, req: CreateZipRequest) => {
+  return await zipManager.createZipArchive(req);
 });

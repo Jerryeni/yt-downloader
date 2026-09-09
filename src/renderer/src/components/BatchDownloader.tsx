@@ -29,8 +29,11 @@ export const BatchDownloader: React.FC<BatchDownloaderProps> = ({
 
     if (rawUrls.length === 0) return;
 
+    const batchId = `batch-${Date.now()}`;
+    const batchTitle = `Batch Videos - ${new Date().toLocaleDateString()}`;
+
     const requests: DownloadRequest[] = rawUrls.map((url, index) => {
-      const id = `batch-${Date.now()}-${index}`;
+      const id = `${batchId}-${index}`;
       return {
         id,
         url,
@@ -41,6 +44,9 @@ export const BatchDownloader: React.FC<BatchDownloaderProps> = ({
         audioFormat: 'mp3',
         outputPath: downloadFolder,
         embedThumbnail: true,
+        batchId,
+        batchTitle,
+        itemIndex: index + 1,
       };
     });
 
