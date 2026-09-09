@@ -15,20 +15,24 @@
 
 ---
 
-## 🚀 Download Pre-Built Binaries
+## 🚀 Download Pre-Built Binaries (v1.0.1)
 
 Get the latest release ready-to-use for your computer:
 
-| Operating System | Architecture | Package Format | Download Link |
+| Operating System | Architecture | Package Format | Direct Download Link |
 | :--- | :--- | :--- | :--- |
-| **macOS** (11.0+) | **Apple Silicon** (M1 / M2 / M3 / M4) | **Apple Disk Image (`.dmg`)** | [⬇️ **Download for macOS (Apple Silicon)**](https://github.com/Jerryeni/yt-downloader/releases/latest) |
-| **macOS** (11.0+) | **Intel** (x64) & Universal | **Portable Archive (`.zip`)** | [⬇️ **Download macOS Universal Zip**](https://github.com/Jerryeni/yt-downloader/releases/latest) |
-| **Windows** (10 / 11) | **64-bit** (x64) | **Setup Installer (`.exe`)** | [⬇️ **Download Windows Installer**](https://github.com/Jerryeni/yt-downloader/releases/latest) |
-| **Windows** (10 / 11) | **64-bit** (x64) | **Portable Executable (`.exe`)** | [⬇️ **Download Windows Portable**](https://github.com/Jerryeni/yt-downloader/releases/latest) |
-| **Mobile & Web** | **iOS / Android / Browser** | **Web PWA** | [🌐 **Run Self-Hosted Web App**](#-mobile--web-pwa-mode) |
+| **Windows** (10 / 11) | **64-bit** (x64) | **Setup Installer (`.exe`)** | [⬇️ **Download Windows Setup Installer (.exe)**](https://github.com/Jerryeni/yt-downloader/releases/download/v1.0.1/NovaDownloader-Setup-1.0.1-x64.exe) |
+| **Windows** (10 / 11) | **64-bit** (x64) | **Portable Standalone (`.exe`)** | [⬇️ **Download Windows Portable (.exe)**](https://github.com/Jerryeni/yt-downloader/releases/download/v1.0.1/NovaDownloader-Portable-1.0.1-x64.exe) |
+| **macOS** (11.0+) | **Apple Silicon** (M1 / M2 / M3 / M4) | **Apple Disk Image (`.dmg`)** | [⬇️ **Download macOS Apple Silicon (.dmg)**](https://github.com/Jerryeni/yt-downloader/releases/download/v1.0.1/NovaDownloader-1.0.1-mac-arm64.dmg) |
+| **macOS** (11.0+) | **Apple Silicon** (M1 / M2 / M3 / M4) | **Portable Archive (`.zip`)** | [⬇️ **Download macOS Apple Silicon (.zip)**](https://github.com/Jerryeni/yt-downloader/releases/download/v1.0.1/NovaDownloader-1.0.1-mac-arm64.zip) |
+| **macOS** (11.0+) | **Intel** (x64) | **Apple Disk Image (`.dmg`)** | [⬇️ **Download macOS Intel (.dmg)**](https://github.com/Jerryeni/yt-downloader/releases/download/v1.0.1/NovaDownloader-1.0.1-mac-x64.dmg) |
+| **macOS** (11.0+) | **Intel** (x64) | **Portable Archive (`.zip`)** | [⬇️ **Download macOS Intel (.zip)**](https://github.com/Jerryeni/yt-downloader/releases/download/v1.0.1/NovaDownloader-1.0.1-mac-x64.zip) |
+| **Web & Mobile** | **iOS Safari / Android / Browser** | **PWA Web Bundle (`.zip`)** | [⬇️ **Download Web Server & PWA Package (.zip)**](https://github.com/Jerryeni/yt-downloader/releases/download/v1.0.1/NovaDownloader-1.0.1-web-pwa.zip) |
+
+👉 **All Assets & Releases**: [View All Releases on GitHub](https://github.com/Jerryeni/yt-downloader/releases)
 
 > [!TIP]
-> **macOS First-Launch Note**: Since open-source releases are not notarized through Apple's paid developer program, if macOS displays a *"cannot be opened because it is from an unidentified developer"* notice:
+> **macOS First-Launch Note**: Since open-source community releases are not notarized through Apple's paid developer program, if macOS displays a *"cannot be opened because it is from an unidentified developer"* notice:
 > - Simply right-click (or Control-click) `NovaDownloader.app` in `/Applications` and select **Open** > **Open**.
 > - Or run once in Terminal: `xattr -cr /Applications/NovaDownloader.app`
 
@@ -100,18 +104,34 @@ npm run dev
 
 ---
 
-## 🌐 Mobile & Web PWA Mode
+## 🌐 Mobile (iPhone, iPad, Android) & Web PWA Mode
 
-You can also run NovaDownloader as a local or self-hosted web service:
+NovaDownloader can be accessed from any mobile browser or installed as a Progressive Web App (PWA) on iPhone, iPad, and Android devices:
 
-```bash
-npm run web
-```
-Then open:
-```text
-http://localhost:3000
-```
-On your phone (on the same Wi-Fi network), open `http://<your-computer-ip>:3000` to search, stream, and download videos directly on your mobile device!
+### Quickstart with Downloaded Web Bundle:
+1. Download [**NovaDownloader-1.0.1-web-pwa.zip**](https://github.com/Jerryeni/yt-downloader/releases/download/v1.0.1/NovaDownloader-1.0.1-web-pwa.zip) and unzip it.
+2. Run:
+   ```bash
+   npm install --omit=dev
+   node dist/server/server.js
+   ```
+3. The console will display your local network IP:
+   ```text
+   ⚡ NovaDownloader Web & PWA Server v1.0.1 Ready!
+   💻 Local access:   http://localhost:3000
+   📱 Mobile (LAN):   http://192.168.1.15:3000
+   ```
+
+### 📱 Installing on Apple Mobile (iPhone / iPad):
+1. On your iPhone or iPad, open Safari and navigate to `http://<your-computer-ip>:3000`.
+2. Tap the **Share** button (the square with an arrow pointing up).
+3. Scroll down and tap **"Add to Home Screen"**.
+4. Confirm by tapping **Add**. NovaDownloader will appear on your iOS home screen as a standalone, full-screen app!
+
+### 🤖 Installing on Android:
+1. On your Android phone or tablet, open Chrome and visit `http://<your-computer-ip>:3000`.
+2. Chrome will automatically prompt with an **"Add NovaDownloader to Home screen"** banner (or tap the 3-dot menu > **Install app**).
+3. The app installs directly into your app drawer with full offline caching and responsive controls.
 
 ---
 

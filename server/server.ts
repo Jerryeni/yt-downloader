@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
+import os from 'os';
 import archiver from 'archiver';
 import { spawn } from 'child_process';
 import { exec } from 'child_process';
@@ -20,25 +21,29 @@ if (fs.existsSync(clientDist)) {
   app.use(express.static(clientDist));
 }
 
-// Locate yt-dlp
+// Locate yt-dlp across macOS, Windows, and Linux
 async function getYtDlp(): Promise<string> {
   const possiblePaths = [
-    path.join(process.env.HOME || '', 'Library/Application Support/nova-downloader/bin/yt-dlp'),
+    path.join(process.env.APPDATA || '', 'nova-downloader/bin/yt-dlp.exe'),
+    path.join(process.env.LOCALAPPDATA || '', 'Programs/yt-dlp/yt-dlp.exe'),
+    path.join(__dirname, '../../bin/yt-dlp.exe'),
     path.join(__dirname, '../../bin/yt-dlp'),
+    path.join(process.env.HOME || '', 'Library/Application Support/nova-downloader/bin/yt-dlp'),
     '/usr/local/bin/yt-dlp',
     '/opt/homebrew/bin/yt-dlp',
   ];
 
   for (const p of possiblePaths) {
-    if (fs.existsSync(p)) return p;
+    if (p && fs.existsSync(p)) return p;
   }
 
   try {
-    const { stdout } = await execAsync('which yt-dlp');
-    if (stdout.trim()) return stdout.trim();
+    const whichCmd = process.platform === 'win32' ? 'where yt-dlp' : 'which yt-dlp';
+    const { stdout } = await execAsync(whichCmd);
+    if (stdout.trim()) return stdout.trim().split(/\r?\n/)[0];
   } catch {}
 
-  return 'yt-dlp';
+  return process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp';
 }
 
 function formatDuration(seconds: number): string {
@@ -426,5 +431,24 @@ app.use((_req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`NovaDownloader Web & PWA Server running at http://localhost:${PORT}`);
+  const nets = os.networkInterfaces();
+  const addresses: string[] = [];
+  for (const name of Object.keys(nets)) {
+    for (const net of nets[name] || []) {
+      if (net.family === 'IPv4' && !net.internal) {
+        addresses.push(net.address);
+      }
+    }
+  }
+
+  console.log(`\n======================================================`);
+  console.log(`⚡ NovaDownloader Web & PWA Server v1.0.1 Ready!`);
+  console.log(`💻 Local access:   http://localhost:${PORT}`);
+  if (addresses.length > 0) {
+    addresses.forEach((ip) => {
+      console.log(`📱 Mobile (LAN):   http://${ip}:${PORT}`);
+    });
+    console.log(`   (Open on iPhone/Android & tap "Add to Home Screen")`);
+  }
+  console.log(`======================================================\n`);
 });

@@ -44,15 +44,18 @@ win:
     - target: portable
       arch:
         - x64
-  artifactName: "${productName}-Setup-${version}-${arch}.${ext}"
 
 nsis:
+  artifactName: "${productName}-Setup-${version}-${arch}.${ext}"
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
   deleteAppDataOnUninstall: false
   createDesktopShortcut: always
   createStartMenuShortcut: true
+
+portable:
+  artifactName: "${productName}-Portable-${version}-${arch}.${ext}"
 
 publish:
   provider: github

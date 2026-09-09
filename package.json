@@ -1,6 +1,6 @@
 {
   "name": "nova-downloader",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A beautiful, fast, and modern YouTube and video downloader powered by yt-dlp",
   "main": "dist/main/main.js",
   "author": "NovaDownloader Team",

@@ -35,13 +35,19 @@ jobs:
 
       - name: Build macOS Artifacts (DMG & ZIP)
         if: matrix.os == 'macos-latest'
-        run: npx electron-builder --mac
+        run: npx electron-builder --mac --publish never
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Package Web & Mobile PWA Bundle
+        if: matrix.os == 'macos-latest'
+        run: |
+          mkdir -p release
+          zip -r release/NovaDownloader-1.0.1-web-pwa.zip dist/ package.json package-lock.json server/ index.html public/ README.md
+
       - name: Build Windows Artifacts (EXE & Portable)
         if: matrix.os == 'windows-latest'
-        run: npx electron-builder --win
+        run: npx electron-builder --win --publish never
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
