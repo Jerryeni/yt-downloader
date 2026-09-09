@@ -77,6 +77,24 @@ if (!gotTheLock) {
       } catch (err) {
         console.error('Initial binary check error:', err);
       }
+
+      try {
+        // Pre-install the converter in the background so merging never fails
+        // on the user's first download.
+        await binaryManager.getFfmpegPath();
+      } catch (err) {
+        console.error('Initial ffmpeg check error:', err);
+      }
+
+      // The install can take a while; refresh Settings once it settles.
+      try {
+        const status = await binaryManager.getStatus();
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('binary-status', status);
+        }
+      } catch {
+        // non-fatal
+      }
     }, 1500);
 
     app.on('activate', () => {
@@ -171,7 +189,10 @@ ipcMain.handle('get-settings', async () => {
 });
 
 ipcMain.handle('save-settings', async (_event, settings: Partial<AppSettings>) => {
-  return store.saveSettings(settings);
+  const saved = store.saveSettings(settings);
+  // Concurrency changes must take effect without an app restart.
+  downloadEngine.syncConcurrencyFromSettings();
+  return saved;
 });
 
 ipcMain.handle('get-history', async () => {
@@ -194,6 +215,24 @@ ipcMain.handle('get-binary-status', async () => {
 
 ipcMain.handle('update-ytdlp', async () => {
   return await binaryManager.updateYtDlp();
+});
+
+ipcMain.handle('install-ffmpeg', async () => {
+  try {
+    const installedPath = await binaryManager.getFfmpegPath();
+    if (installedPath) {
+      return { success: true, message: 'Media converter (ffmpeg) is ready', path: installedPath };
+    }
+    return {
+      success: false,
+      message:
+        process.platform === 'linux'
+          ? 'Install ffmpeg with your package manager (e.g. sudo apt install ffmpeg)'
+          : 'Could not install ffmpeg automatically. Please check your internet connection.',
+    };
+  } catch (error: any) {
+    return { success: false, message: error.message || 'Failed to install ffmpeg' };
+  }
 });
 
 ipcMain.handle('read-clipboard', async () => {

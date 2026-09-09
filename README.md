@@ -83,7 +83,12 @@ Get the latest release ready-to-use for your computer:
 - **Node.js**: `v18.0.0` or higher (`v20+` recommended)
 - **npm**: `v9.0.0` or higher
 - **Python 3**: Native python3 installed on your machine (used by `yt-dlp`)
-- **FFmpeg**: (Optional, automatically detected from system PATH or homebrew)
+- **FFmpeg**: (Optional) Detected from your system PATH, Homebrew, or common install
+  locations. If it is missing, the app downloads a static build into its own data
+  folder on first launch, so HD merging and MP3 conversion work out of the box.
+  While it is unavailable the app falls back to single-file (pre-muxed) streams,
+  which stay playable but cap video at 720p. On Linux, install it with your package
+  manager (e.g. `sudo apt install ffmpeg`).
 
 ### 1. Clone the Repository
 ```bash

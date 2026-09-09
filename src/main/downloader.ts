@@ -44,12 +44,23 @@ export class DownloadEngine extends EventEmitter {
   private downloadQueue: DownloadRequest[] = [];
   private runningDownloads: Set<string> = new Set();
   private failedRequests: Map<string, DownloadRequest> = new Map();
-  private maxConcurrent: number = 2; // Prevent network & DNS socket exhaustion during large batch downloads
+  private cancelledIds: Set<string> = new Set();
+  // Default keeps network & DNS sockets healthy during large batch downloads;
+  // the user's setting overrides it within a safe range.
+  private maxConcurrent: number = 2;
 
   constructor(binaryManager: BinaryManager, store: AppStore) {
     super();
     this.binaryManager = binaryManager;
     this.store = store;
+    this.syncConcurrencyFromSettings();
+  }
+
+  public syncConcurrencyFromSettings(): void {
+    const configured = this.store.getSettings().maxConcurrentDownloads;
+    if (typeof configured === 'number' && !isNaN(configured)) {
+      this.maxConcurrent = Math.min(Math.max(Math.floor(configured), 1), 5);
+    }
   }
 
   /**
@@ -332,6 +343,30 @@ export class DownloadEngine extends EventEmitter {
    * Queue-Managed Ultra-Fast Download Engine
    */
   public async startDownload(request: DownloadRequest): Promise<void> {
+    // Resolve ffmpeg before a slot is claimed. The first run on a machine with
+    // no converter may spend minutes installing it, and holding a concurrency
+    // slot for that would stall every other item in a batch.
+    if (!(await this.binaryManager.findFfmpeg())) {
+      this.emit('progress', {
+        id: request.id,
+        url: request.url,
+        title: request.title,
+        thumbnail: request.thumbnail,
+        percent: 0,
+        speed: 'Preparing',
+        eta: '--:--',
+        downloadedBytes: '0 MB',
+        totalBytes: 'Setting up media converter...',
+        status: 'queued',
+        startedAt: Date.now(),
+        batchId: request.batchId,
+        batchTitle: request.batchTitle,
+        itemIndex: request.itemIndex,
+      });
+      // Shared across concurrent callers, so a batch triggers a single install.
+      await this.binaryManager.getFfmpegPath();
+    }
+
     // If running processes are below concurrency limit, execute immediately
     if (this.runningDownloads.size < this.maxConcurrent) {
       this.runningDownloads.add(request.id);
@@ -375,12 +410,28 @@ export class DownloadEngine extends EventEmitter {
   }
 
   private processNextInQueue(): void {
-    if (this.runningDownloads.size >= this.maxConcurrent) return;
-    if (this.downloadQueue.length === 0) return;
-
-    const nextRequest = this.downloadQueue.shift();
-    if (nextRequest) {
+    // Fill every free slot: a single completion can release capacity for more
+    // than one queued item when the concurrency setting has been raised.
+    while (this.runningDownloads.size < this.maxConcurrent && this.downloadQueue.length > 0) {
+      const nextRequest = this.downloadQueue.shift();
+      if (!nextRequest) break;
       this.runningDownloads.add(nextRequest.id);
+      this.emit('progress', {
+        id: nextRequest.id,
+        url: nextRequest.url,
+        title: nextRequest.title,
+        thumbnail: nextRequest.thumbnail,
+        percent: 0,
+        speed: '0 MB/s',
+        eta: '--:--',
+        downloadedBytes: '0 MB',
+        totalBytes: 'Starting...',
+        status: 'downloading',
+        startedAt: Date.now(),
+        batchId: nextRequest.batchId,
+        batchTitle: nextRequest.batchTitle,
+        itemIndex: nextRequest.itemIndex,
+      });
       this.executeDownload(nextRequest);
     }
   }
@@ -402,6 +453,19 @@ export class DownloadEngine extends EventEmitter {
       this.startDownload(req);
     }
     return failedList.length;
+  }
+
+  private extractVideoId(url: string): string | null {
+    const patterns = [
+      /[?&]v=([A-Za-z0-9_-]{11})/,
+      /youtu\.be\/([A-Za-z0-9_-]{11})/,
+      /\/(?:shorts|embed|live)\/([A-Za-z0-9_-]{11})/,
+    ];
+    for (const re of patterns) {
+      const m = url.match(re);
+      if (m) return m[1];
+    }
+    return null;
   }
 
   private sanitizeErrorMessage(rawError: string): string {
@@ -426,8 +490,19 @@ export class DownloadEngine extends EventEmitter {
     if (rawError.includes('Private video')) {
       return 'Skipped: This video is set to Private by the creator on YouTube.';
     }
+    // ffmpeg missing is by far the most common postprocessing failure on a clean
+    // Windows machine - keep it distinct from the out-of-disk-space case.
+    if (
+      rawError.includes('ffmpeg not found') ||
+      rawError.includes('ffprobe and ffmpeg not found') ||
+      rawError.includes('ffprobe/avprobe and ffmpeg/avconv not found') ||
+      rawError.includes('You have requested merging of multiple formats but ffmpeg is not installed') ||
+      rawError.includes('ffmpeg is not installed')
+    ) {
+      return 'Media converter (ffmpeg) is missing. NovaDownloader will install it automatically - click Retry in a moment.';
+    }
     if (rawError.includes('Conversion failed') || rawError.includes('Unable to embed using ffprobe & ffmpeg')) {
-      return 'Postprocessing error: Failed to merge audio/video streams (likely ran out of disk space).';
+      return 'Postprocessing error: failed to merge the audio and video streams.';
     }
     if (rawError.includes('Sign in to confirm your age')) {
       return 'Age-restricted video requiring YouTube sign-in.';
@@ -442,7 +517,11 @@ export class DownloadEngine extends EventEmitter {
 
   private async executeDownload(request: DownloadRequest): Promise<void> {
     const ytDlp = await this.binaryManager.getYtDlpPath();
-    const ffmpeg = await this.binaryManager.getFfmpegPath();
+
+    // Already resolved (and installed if needed) in startDownload. When it is
+    // still null the machine has no converter, so we fall back to formats that
+    // need no merging rather than failing after a full download.
+    const ffmpeg = await this.binaryManager.findFfmpeg();
 
     const outputFolder = request.outputPath || this.store.getSettings().downloadFolder;
     if (!fs.existsSync(outputFolder)) {
@@ -484,32 +563,55 @@ export class DownloadEngine extends EventEmitter {
     }
 
     if (request.formatType === 'audio') {
-      const audioFormat = request.audioFormat || 'mp3';
-      args.push('-x', '--audio-format', audioFormat, '--audio-quality', '0');
-      if (request.embedThumbnail) {
-        args.push('--embed-thumbnail');
+      if (ffmpeg) {
+        const audioFormat = request.audioFormat || 'mp3';
+        args.push('-x', '--audio-format', audioFormat, '--audio-quality', '0');
+        if (request.embedThumbnail) {
+          args.push('--embed-thumbnail');
+        }
+        args.push('--add-metadata');
+      } else {
+        // No converter available: keep the native audio stream (m4a/webm) so the
+        // user still gets a playable file instead of a postprocessing failure.
+        args.push('-f', 'bestaudio[ext=m4a]/bestaudio/best');
       }
-      args.push('--add-metadata');
     } else {
-      if (request.quality === 'best') {
-        args.push('-f', 'bestvideo+bestaudio/best', '--merge-output-format', 'mp4');
-      } else if (request.quality.includes('p')) {
-        const height = parseInt(request.quality.replace(/\D/g, ''), 10);
+      // quality can arrive undefined from older callers, so normalise first.
+      const quality = request.quality || 'best';
+      const parsedHeight = quality.includes('p') ? parseInt(quality.replace(/\D/g, ''), 10) : NaN;
+      const height = Number.isFinite(parsedHeight) && parsedHeight > 0 ? parsedHeight : null;
+
+      if (ffmpeg) {
+        if (height) {
+          args.push(
+            '-f',
+            `bestvideo[height<=${height}]+bestaudio/best[height<=${height}]/best`,
+            '--merge-output-format',
+            'mp4'
+          );
+        } else {
+          args.push('-f', 'bestvideo+bestaudio/best', '--merge-output-format', 'mp4');
+        }
+
+        if (request.embedThumbnail) {
+          args.push('--embed-thumbnail');
+        }
+        if (request.embedSubtitles && request.subtitleLang) {
+          args.push('--write-sub', '--sub-lang', request.subtitleLang, '--embed-subs');
+        }
+      } else {
+        // Restrict to progressive (pre-muxed) streams, which need no merging.
+        // Caps out at 720p on YouTube, but produces a working file every time.
         args.push(
           '-f',
-          `bestvideo[height<=${height}]+bestaudio/best[height<=${height}]/best`,
-          '--merge-output-format',
-          'mp4'
+          height
+            ? `best[height<=${height}][acodec!=none][vcodec!=none]/best[height<=${height}]/best`
+            : 'best[acodec!=none][vcodec!=none]/best'
         );
-      } else {
-        args.push('-f', 'bestvideo+bestaudio/best', '--merge-output-format', 'mp4');
-      }
-
-      if (request.embedThumbnail) {
-        args.push('--embed-thumbnail');
-      }
-      if (request.embedSubtitles && request.subtitleLang) {
-        args.push('--write-sub', '--sub-lang', request.subtitleLang, '--embed-subs');
+        if (request.embedSubtitles && request.subtitleLang) {
+          // Cannot embed without ffmpeg; write a sidecar file instead.
+          args.push('--write-sub', '--sub-lang', request.subtitleLang);
+        }
       }
     }
 
@@ -594,15 +696,28 @@ export class DownloadEngine extends EventEmitter {
     proc.on('close', (code) => {
       cleanupAndNext();
 
+      if (this.cancelledIds.has(request.id)) {
+        this.cancelledIds.delete(request.id);
+        return;
+      }
+
       if (code === 0) {
         this.failedRequests.delete(request.id);
 
         if (!downloadedFilePath || !fs.existsSync(downloadedFilePath)) {
           try {
             if (fs.existsSync(outputFolder)) {
+              // Match on the video id, which the output template always embeds.
+              // Matching loosely on extension picks a sibling's file during batch
+              // downloads, so require the id and skip partial/fragment artifacts.
+              const videoId = this.extractVideoId(request.url);
               const files = fs.readdirSync(outputFolder);
               const matching = files
-                .filter((f) => f.includes(request.title.slice(0, 20)) || f.endsWith('.mp4') || f.endsWith('.mp3'))
+                .filter((f) => {
+                  if (/\.(part|ytdl|temp)$/i.test(f)) return false;
+                  if (videoId) return f.includes(`[${videoId}]`);
+                  return f.includes(request.title.slice(0, 20));
+                })
                 .map((f) => ({
                   name: f,
                   fullPath: path.join(outputFolder, f),
@@ -645,6 +760,10 @@ export class DownloadEngine extends EventEmitter {
 
     proc.on('error', (err) => {
       cleanupAndNext();
+      if (this.cancelledIds.has(request.id)) {
+        this.cancelledIds.delete(request.id);
+        return;
+      }
       this.failedRequests.set(request.id, request);
       progressObj.status = 'error';
       progressObj.error = this.sanitizeErrorMessage(err.message);
@@ -667,16 +786,17 @@ export class DownloadEngine extends EventEmitter {
 
     const proc = this.activeProcesses.get(id);
     if (proc) {
-      proc.kill('SIGTERM');
+      // Mark first: the process' own 'close' handler runs right after the kill
+      // and must not report this as a failure or free the slot a second time.
+      this.cancelledIds.add(id);
       this.activeProcesses.delete(id);
-      this.runningDownloads.delete(id);
+      proc.kill('SIGTERM');
       this.emit('progress', {
         id,
         percent: 0,
         status: 'cancelled',
         error: 'Download cancelled by user',
       });
-      this.processNextInQueue();
       return true;
     }
     return false;

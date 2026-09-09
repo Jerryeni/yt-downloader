@@ -42,6 +42,7 @@ export const App: React.FC = () => {
   const [clipboardUrl, setClipboardUrl] = useState<string | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [isUpdatingBinary, setIsUpdatingBinary] = useState<boolean>(false);
+  const [isInstallingFfmpeg, setIsInstallingFfmpeg] = useState<boolean>(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [batchZipPrompt, setBatchZipPrompt] = useState<{
     isOpen: boolean;
@@ -156,8 +157,12 @@ export const App: React.FC = () => {
       }
     });
 
+    // The converter may finish installing after startup; keep Settings in sync.
+    const unsubscribeBinary = clientService.onBinaryStatus(setBinaryStatus);
+
     return () => {
       unsubscribe();
+      unsubscribeBinary();
     };
   }, []);
 
@@ -378,6 +383,21 @@ export const App: React.FC = () => {
     }
   };
 
+  // Install the media converter on demand (auto-runs at startup too)
+  const handleInstallFfmpeg = async () => {
+    setIsInstallingFfmpeg(true);
+    try {
+      const res = await clientService.installFfmpeg();
+      showToast(res.message, res.success ? 'success' : 'error');
+      const status = await clientService.getBinaryStatus();
+      setBinaryStatus(status);
+    } catch (err: any) {
+      showToast(err.message || 'Failed to install ffmpeg', 'error');
+    } finally {
+      setIsInstallingFfmpeg(false);
+    }
+  };
+
   const handleClearCompleted = () => {
     setDownloads((prev) => prev.filter((d) => d.status === 'downloading' || d.status === 'processing'));
   };
@@ -584,6 +604,8 @@ export const App: React.FC = () => {
         onUpdateYtDlp={handleUpdateYtDlp}
         isUpdatingBinary={isUpdatingBinary}
         isElectron={isElectron}
+        onInstallFfmpeg={handleInstallFfmpeg}
+        isInstallingFfmpeg={isInstallingFfmpeg}
       />
 
       {/* Toasts */}
