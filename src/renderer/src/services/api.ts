@@ -237,6 +237,20 @@ export const clientService = {
     return { success: true, message: 'Server engine is managed remotely' };
   },
 
+  onBinaryStatus(callback: (status: BinaryStatus) => void): () => void {
+    if (isElectron) {
+      return window.electronAPI.onBinaryStatus(callback);
+    }
+    return () => {};
+  },
+
+  async installFfmpeg(): Promise<{ success: boolean; message: string; path?: string }> {
+    if (isElectron) {
+      return await window.electronAPI.installFfmpeg();
+    }
+    return { success: true, message: 'Server transcoder is managed remotely' };
+  },
+
   async readClipboard(): Promise<string> {
     if (isElectron) {
       return await window.electronAPI.readClipboard();

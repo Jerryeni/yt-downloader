@@ -22,6 +22,8 @@ interface SettingsModalProps {
   onUpdateYtDlp: () => Promise<void>;
   isUpdatingBinary: boolean;
   isElectron: boolean;
+  onInstallFfmpeg: () => Promise<void>;
+  isInstallingFfmpeg: boolean;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -34,6 +36,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onUpdateYtDlp,
   isUpdatingBinary,
   isElectron,
+  onInstallFfmpeg,
+  isInstallingFfmpeg,
 }) => {
   if (!isOpen) return null;
 
@@ -239,6 +243,63 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 >
                   <RefreshCw size={12} className={isUpdatingBinary ? 'spin-animation' : ''} />
                   <span>{isUpdatingBinary ? 'Updating...' : 'Check Updates'}</span>
+                </button>
+              )}
+            </div>
+
+            {/* ffmpeg: required to merge HD video with audio and to convert audio */}
+            <div
+              style={{
+                marginTop: '8px',
+                backgroundColor: 'var(--bg-subtle)',
+                border: '1px solid var(--border-default)',
+                borderRadius: 'var(--radius-md)',
+                padding: '12px 14px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {binaryStatus?.ffmpeg?.available ? (
+                  <CheckCircle2 size={16} color="var(--success)" />
+                ) : (
+                  <AlertTriangle size={16} color="var(--warning)" />
+                )}
+                <div>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                    Media Converter (ffmpeg)
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                    {binaryStatus?.ffmpeg?.available
+                      ? `Version: ${binaryStatus.ffmpeg.version || 'installed'}`
+                      : isInstallingFfmpeg || binaryStatus?.ffmpeg?.installing
+                      ? 'Installing... HD merging will be enabled shortly'
+                      : 'Missing - HD quality is capped until installed'}
+                  </div>
+                </div>
+              </div>
+
+              {isElectron && !binaryStatus?.ffmpeg?.available && (
+                <button
+                  onClick={onInstallFfmpeg}
+                  disabled={isInstallingFfmpeg}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '6px 10px',
+                    borderRadius: 'var(--radius-sm)',
+                    backgroundColor: 'var(--bg-surface)',
+                    border: '1px solid var(--border-default)',
+                    color: 'var(--text-primary)',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    cursor: isInstallingFfmpeg ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  <RefreshCw size={12} className={isInstallingFfmpeg ? 'spin-animation' : ''} />
+                  <span>{isInstallingFfmpeg ? 'Installing...' : 'Install'}</span>
                 </button>
               )}
             </div>

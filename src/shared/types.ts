@@ -149,6 +149,7 @@ export interface BinaryStatus {
     available: boolean;
     version?: string;
     path?: string;
+    installing?: boolean;
   };
 }
 
@@ -170,7 +171,9 @@ export interface ElectronAPI {
   deleteHistoryItem: (id: string) => Promise<boolean>;
   getBinaryStatus: () => Promise<BinaryStatus>;
   updateYtDlp: () => Promise<{ success: boolean; message: string; version?: string }>;
+  installFfmpeg: () => Promise<{ success: boolean; message: string; path?: string }>;
   onDownloadProgress: (callback: (progress: DownloadProgress) => void) => () => void;
+  onBinaryStatus: (callback: (status: BinaryStatus) => void) => () => void;
   readClipboard: () => Promise<string>;
   createZip: (request: CreateZipRequest) => Promise<CreateZipResult>;
 }

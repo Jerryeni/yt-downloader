@@ -4,6 +4,7 @@ import {
   AppSettings,
   DownloadProgress,
   ElectronAPI,
+  BinaryStatus,
   SearchFilterOptions,
   CreateZipRequest,
 } from '../shared/types';
@@ -26,8 +27,16 @@ const api: ElectronAPI = {
   deleteHistoryItem: (id: string) => ipcRenderer.invoke('delete-history-item', id),
   getBinaryStatus: () => ipcRenderer.invoke('get-binary-status'),
   updateYtDlp: () => ipcRenderer.invoke('update-ytdlp'),
+  installFfmpeg: () => ipcRenderer.invoke('install-ffmpeg'),
   readClipboard: () => ipcRenderer.invoke('read-clipboard'),
   createZip: (request: CreateZipRequest) => ipcRenderer.invoke('create-zip', request),
+  onBinaryStatus: (callback: (status: BinaryStatus) => void) => {
+    const handler = (_event: any, status: BinaryStatus) => callback(status);
+    ipcRenderer.on('binary-status', handler);
+    return () => {
+      ipcRenderer.removeListener('binary-status', handler);
+    };
+  },
   onDownloadProgress: (callback: (progress: DownloadProgress) => void) => {
     const handler = (_event: any, progress: DownloadProgress) => callback(progress);
     ipcRenderer.on('download-progress', handler);
