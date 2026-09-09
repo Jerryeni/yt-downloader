@@ -56,7 +56,32 @@ export class ZipManager {
           zlib: { level: 5 }, // Balanced compression ratio & execution speed
         });
 
+        // 'close' also fires when the archive errors or is aborted, so guard the
+        // destructive step behind an explicit success flag - deleting originals
+        // after a failed zip would destroy the user's only copy.
+        let archiveFailed = false;
+
         outputStream.on('close', async () => {
+          if (archiveFailed) {
+            return;
+          }
+
+          // Confirm the archive actually materialised before touching originals.
+          let zipIsValid = false;
+          try {
+            zipIsValid = fs.existsSync(targetZipPath) && fs.statSync(targetZipPath).size > 0;
+          } catch {
+            zipIsValid = false;
+          }
+
+          if (!zipIsValid) {
+            return resolve({
+              success: false,
+              zipPath: '',
+              error: 'The ZIP archive could not be written to disk.',
+            });
+          }
+
           // If user chose to delete originals after successful zipping
           if (req.deleteOriginals) {
             for (const item of req.files) {
@@ -77,6 +102,7 @@ export class ZipManager {
         });
 
         archive.on('error', (err: any) => {
+          archiveFailed = true;
           console.error(`Archive creation error: ${err.message}`);
           resolve({
             success: false,
@@ -91,6 +117,16 @@ export class ZipManager {
           } else {
             console.error('Archiver error warning:', warning);
           }
+        });
+
+        outputStream.on('error', (err: any) => {
+          archiveFailed = true;
+          console.error(`Failed writing ZIP archive: ${err.message}`);
+          resolve({
+            success: false,
+            zipPath: '',
+            error: err.message || 'Failed to write the ZIP archive',
+          });
         });
 
         archive.pipe(outputStream);
@@ -109,6 +145,7 @@ export class ZipManager {
         }
 
         if (addedCount === 0) {
+          archiveFailed = true;
           archive.abort();
           try {
             if (fs.existsSync(targetZipPath)) fs.unlinkSync(targetZipPath);
