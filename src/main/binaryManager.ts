@@ -168,6 +168,11 @@ export class BinaryManager {
 
     if (!isWin) {
       fs.chmodSync(destPath, 0o755);
+      try {
+        await execAsync(`xattr -d com.apple.quarantine "${destPath}" 2>/dev/null || true`);
+      } catch {
+        // ignore
+      }
     }
 
     this.ytDlpPath = destPath;
